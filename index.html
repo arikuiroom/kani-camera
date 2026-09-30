@@ -115,14 +115,30 @@
       border-radius: 16px;
       box-shadow: 0 8px 40px rgba(0,0,0,.45);
     }
-    .preview-actions { display: flex; gap: 10px; }
-    .preview-actions a {
+    .preview-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .preview-actions a, .preview-actions button {
       text-decoration: none;
       border-radius: 999px;
+      padding: 11px 16px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    #shareBtn {
       background: white;
       color: #111;
-      padding: 10px 16px;
-      font-weight: 600;
+    }
+    #fallbackSave {
+      display: none;
+      background: rgba(255,255,255,.16);
+      color: white;
+    }
+    #saveHelp {
+      margin: -3px 0 0;
+      color: rgba(255,255,255,.78);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.45;
+      max-width: 340px;
     }
     #startOverlay {
       position: fixed;
@@ -176,9 +192,11 @@
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-actions">
-      <a id="saveLink" download="kani-guitar-photo.png">画像を保存</a>
+      <button id="shareBtn">共有 / 写真に保存</button>
+      <a id="fallbackSave" download="kani-guitar-photo.png">ファイルとして保存</a>
       <button id="closePreview">閉じる</button>
     </div>
+    <p id="saveHelp">iPhoneでは「共有 / 写真に保存」→ 共有シートの「画像を保存」で写真アプリに入れられます。</p>
   </div>
 
   <div id="startOverlay">

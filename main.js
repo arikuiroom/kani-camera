@@ -13,13 +13,16 @@ const flipBtn = document.getElementById('flipBtn');
 const hideBtn = document.getElementById('hideBtn');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
-const saveLink = document.getElementById('saveLink');
+const shareBtn = document.getElementById('shareBtn');
+const fallbackSave = document.getElementById('fallbackSave');
 const closePreview = document.getElementById('closePreview');
 
 let facingMode = 'environment';
 let stream = null;
 let model = null;
 let modelVisible = true;
+let lastCaptureBlob = null;
+let lastCaptureUrl = null;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 100);
@@ -262,10 +265,46 @@ captureBtn.addEventListener('click', () => {
   camera.aspect = cssW / cssH;
   camera.updateProjectionMatrix();
 
-  const url = out.toDataURL('image/png');
-  previewImg.src = url;
-  saveLink.href = url;
-  preview.style.display = 'flex';
+  out.toBlob((blob) => {
+    if (!blob) {
+      alert('画像の作成に失敗しました。');
+      return;
+    }
+
+    lastCaptureBlob = blob;
+    if (lastCaptureUrl) URL.revokeObjectURL(lastCaptureUrl);
+    lastCaptureUrl = URL.createObjectURL(blob);
+
+    previewImg.src = lastCaptureUrl;
+    fallbackSave.href = lastCaptureUrl;
+    fallbackSave.style.display = 'none';
+    preview.style.display = 'flex';
+  }, 'image/png');
+});
+
+shareBtn.addEventListener('click', async () => {
+  if (!lastCaptureBlob) return;
+
+  const file = new File([lastCaptureBlob], 'kani-guitar-photo.png', { type: 'image/png' });
+
+  try {
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      await navigator.share({
+        files: [file],
+        title: 'カニギターといっしょ'
+      });
+      return;
+    }
+
+    // Web Share のファイル共有に未対応の場合だけ従来の保存リンクを表示。
+    fallbackSave.style.display = 'inline-block';
+    alert('このブラウザでは画像共有に対応していないため、「ファイルとして保存」を使ってください。');
+  } catch (e) {
+    if (e?.name === 'AbortError') return;
+    console.error(e);
+    fallbackSave.style.display = 'inline-block';
+    alert('共有を開けませんでした。「ファイルとして保存」を使ってください。');
+  }
 });
 
 closePreview.addEventListener('click', () => {
