@@ -11,6 +11,8 @@ const captureBtn = document.getElementById('captureBtn');
 const resetBtn = document.getElementById('resetBtn');
 const flipBtn = document.getElementById('flipBtn');
 const hideBtn = document.getElementById('hideBtn');
+const moveModeBtn = document.getElementById('moveModeBtn');
+const rotateModeBtn = document.getElementById('rotateModeBtn');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -21,6 +23,8 @@ let facingMode = 'environment';
 let stream = null;
 let model = null;
 let modelVisible = true;
+let interactionMode = 'move';
+let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
 
@@ -82,7 +86,8 @@ loader.load(
     model.position.sub(center);
     const maxDim = Math.max(size.x, size.y, size.z);
     const s = 2.2 / maxDim;
-    model.scale.setScalar(s);
+    initialModelScale = s;
+    model.scale.setScalar(initialModelScale);
 
     // Put it in front of camera. Slightly tilted for a friendly initial view.
     model.rotation.set(0.05, -0.2, -0.12);
@@ -154,16 +159,7 @@ resetBtn.addEventListener('click', () => {
   if (!model) return;
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
-  model.scale.setScalar(model.scale.x / model.scale.x); // normalize below
-  // Recompute original normalized scale from bounding box.
-  const box = new THREE.Box3().setFromObject(model);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  const maxDim = Math.max(size.x, size.y, size.z);
-  if (maxDim > 0) {
-    const factor = 2.2 / maxDim;
-    model.scale.multiplyScalar(factor);
-  }
+  model.scale.setScalar(initialModelScale);
 });
 
 hideBtn.addEventListener('click', () => {
@@ -173,9 +169,20 @@ hideBtn.addEventListener('click', () => {
   hideBtn.textContent = modelVisible ? '隠す' : '表示';
 });
 
+function setInteractionMode(mode) {
+  interactionMode = mode;
+  const moving = mode === 'move';
+  moveModeBtn.classList.toggle('active', moving);
+  rotateModeBtn.classList.toggle('active', !moving);
+  statusEl.textContent = moving ? '移動モード' : '3D回転モード';
+}
+
+moveModeBtn.addEventListener('click', () => setInteractionMode('move'));
+rotateModeBtn.addEventListener('click', () => setInteractionMode('rotate'));
+
 // Touch gestures:
-// 1 finger = move in screen plane
-// 2 fingers = pinch scale + rotate around Z
+// 1 finger = move OR 3D rotate, depending on selected mode
+// 2 fingers = pinch scale + rotate around screen Z axis
 const touches = new Map();
 let gestureStart = null;
 
@@ -194,15 +201,26 @@ canvas.addEventListener('pointermove', (e) => {
   if (touches.size === 1) {
     const dx = e.clientX - prev.x;
     const dy = e.clientY - prev.y;
-    const k = 0.0045;
-    model.position.x += dx * k;
-    model.position.y -= dy * k;
+
+    if (interactionMode === 'move') {
+      const k = 0.0045;
+      model.position.x += dx * k;
+      model.position.y -= dy * k;
+    } else {
+      // Drag the model itself in 3D.
+      // Horizontal drag turns left/right; vertical drag tilts up/down.
+      const rotateSpeed = 0.010;
+      model.rotation.y += dx * rotateSpeed;
+      model.rotation.x += dy * rotateSpeed;
+    }
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
     if (gestureStart && current) {
       const scaleFactor = current.distance / gestureStart.distance;
       model.scale.multiplyScalar(scaleFactor);
-      model.rotation.z += current.angle - gestureStart.angle;
+
+      // Reversed from v1.1 so the object follows the fingers more naturally.
+      model.rotation.z -= current.angle - gestureStart.angle;
       gestureStart = current;
     }
   }

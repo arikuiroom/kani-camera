@@ -73,6 +73,30 @@
       align-items: center;
       pointer-events: auto;
     }
+    .mode-switch {
+      position: absolute;
+      left: 50%;
+      bottom: calc(max(18px, env(safe-area-inset-bottom)) + 86px);
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.55);
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .mode-switch button {
+      box-shadow: none;
+      background: transparent;
+      padding: 8px 14px;
+    }
+    .mode-switch button.active {
+      background: rgba(255,255,255,.92);
+      color: #111;
+      font-weight: 700;
+    }
     .capture {
       width: 70px;
       height: 70px;
@@ -179,8 +203,13 @@
       <button id="resetBtn">位置を戻す</button>
     </div>
     <div id="hint" class="hint">
-      1本指：カニギターを移動<br>
-      2本指：拡大縮小・回転
+      「移動」：1本指で位置を移動<br>
+      「3D回転」：1本指で向きを変更<br>
+      2本指：拡大縮小・画面内回転
+    </div>
+    <div class="mode-switch" aria-label="操作モード">
+      <button id="moveModeBtn" class="active">移動</button>
+      <button id="rotateModeBtn">3D回転</button>
     </div>
     <div class="controls">
       <button id="flipBtn">反転</button>
