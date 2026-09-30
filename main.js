@@ -52,9 +52,80 @@ const fill = new THREE.DirectionalLight(0xffffff, 1.0);
 fill.position.set(-3, 1, 2);
 scene.add(fill);
 
-const texture = await new THREE.TextureLoader().loadAsync('./textures/KA23_KanisanBurst_Albedo.png');
-texture.colorSpace = THREE.SRGBColorSpace;
-texture.flipY = true;
+// ---- PBR textures ---------------------------------------------------------
+// Albedo is color data. Metallic/Roughness are linear grayscale data.
+const textureLoader = new THREE.TextureLoader();
+
+const [albedoTexture, metallicTexture, roughnessTexture] = await Promise.all([
+  textureLoader.loadAsync('./textures/KA23_KanisanBurst_Albedo.png'),
+  textureLoader.loadAsync('./textures/KA23_Solid_Metallic.png'),
+  textureLoader.loadAsync('./textures/KA23_Solid_Roughness.png')
+]);
+
+albedoTexture.colorSpace = THREE.SRGBColorSpace;
+albedoTexture.flipY = true;
+metallicTexture.flipY = true;
+roughnessTexture.flipY = true;
+
+// ---- Pseudo live environment reflection ----------------------------------
+// The phone camera is only a forward-facing image, not a true 360° environment.
+// For this lightweight Web version we build a small CubeTexture from several
+// cropped copies of the live camera image. It is not physically exact, but it
+// lets shiny/metallic areas pick up the color and brightness of the surroundings.
+const ENV_SIZE = 64;
+const envCanvases = Array.from({ length: 6 }, () => {
+  const c = document.createElement('canvas');
+  c.width = ENV_SIZE;
+  c.height = ENV_SIZE;
+  return c;
+});
+
+const liveEnvMap = new THREE.CubeTexture(envCanvases);
+liveEnvMap.colorSpace = THREE.SRGBColorSpace;
+liveEnvMap.needsUpdate = true;
+
+let lastEnvUpdate = 0;
+
+function updateLiveEnvironment(now) {
+  if (!video.videoWidth || !video.videoHeight) return;
+  if (now - lastEnvUpdate < 250) return; // about 4 updates/sec
+  lastEnvUpdate = now;
+
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const side = Math.min(vw, vh);
+  const sxBase = (vw - side) * 0.5;
+  const syBase = (vh - side) * 0.5;
+
+  envCanvases.forEach((c, i) => {
+    const ctx = c.getContext('2d');
+    ctx.save();
+    ctx.clearRect(0, 0, ENV_SIZE, ENV_SIZE);
+
+    const shiftX = ((i % 3) - 1) * side * 0.12;
+    const shiftY = (i >= 3 ? 1 : -1) * side * 0.06;
+    const sx = Math.max(0, Math.min(vw - side, sxBase + shiftX));
+    const sy = Math.max(0, Math.min(vh - side, syBase + shiftY));
+
+    // Mirror alternating faces to avoid all six faces being identical.
+    if (i % 2 === 1) {
+      ctx.translate(ENV_SIZE, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.globalAlpha = 0.92;
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
+
+    // Slight blur/softening: reflections should feel like lighting, not a TV screen.
+    ctx.globalAlpha = 0.18;
+    ctx.filter = 'blur(5px)';
+    ctx.drawImage(c, 0, 0, ENV_SIZE, ENV_SIZE);
+    ctx.filter = 'none';
+    ctx.restore();
+  });
+
+  liveEnvMap.needsUpdate = true;
+}
 
 const loader = new FBXLoader();
 loader.load(
@@ -67,13 +138,19 @@ loader.load(
       child.castShadow = false;
       child.receiveShadow = false;
 
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach((mat) => {
-        if (!mat) return;
-        mat.map = texture;
-        if (mat.color) mat.color.set(0xffffff);
-        mat.needsUpdate = true;
+      // Use one predictable PBR material so FBX material colors do not tint
+      // the Albedo red. The supplied maps control color, metalness and roughness.
+      const pbrMaterial = new THREE.MeshStandardMaterial({
+        map: albedoTexture,
+        metalnessMap: metallicTexture,
+        roughnessMap: roughnessTexture,
+        metalness: 1.0,
+        roughness: 1.0,
+        envMap: liveEnvMap,
+        envMapIntensity: 0.55
       });
+
+      child.material = pbrMaterial;
     });
 
     // Center model and normalize scale.
@@ -113,7 +190,8 @@ function resize() {
 }
 addEventListener('resize', resize);
 
-function render() {
+function render(now = 0) {
+  updateLiveEnvironment(now);
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
