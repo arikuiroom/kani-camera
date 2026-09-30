@@ -154,7 +154,6 @@ function updateAdaptiveLighting(now) {
   lightSampleCtx.clearRect(0, 0, w, h);
   drawSourceCover(lightSampleCtx, source, w, h, false);
   const data = lightSampleCtx.getImageData(0, 0, w, h).data;
-  const data = lightSampleCtx.getImageData(0, 0, w, h).data;
 
   let r = 0, g = 0, b = 0, lumSum = 0;
   let brightWeight = 0, brightX = 0, brightY = 0;
