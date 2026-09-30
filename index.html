@@ -97,6 +97,95 @@
       color: #111;
       font-weight: 700;
     }
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      pointer-events: auto;
+    }
+    #lightPanel {
+      display: none;
+      position: absolute;
+      top: calc(max(12px, env(safe-area-inset-top)) + 52px);
+      right: 12px;
+      width: min(310px, calc(100vw - 24px));
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(12,12,12,.78);
+      color: white;
+      pointer-events: auto;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 8px 30px rgba(0,0,0,.3);
+    }
+    #lightPanel.open { display: block; }
+    .light-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .light-row {
+      display: grid;
+      grid-template-columns: 88px 1fr 46px;
+      gap: 8px;
+      align-items: center;
+      margin: 9px 0;
+      font-size: 13px;
+    }
+    .light-row input[type="range"] { width: 100%; }
+    .light-row output {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      opacity: .82;
+    }
+    .auto-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .switch {
+      appearance: none;
+      width: 48px;
+      height: 28px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      position: relative;
+      transition: .18s;
+    }
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: white;
+      transition: .18s;
+    }
+    .switch:checked { background: rgba(255,255,255,.75); }
+    .switch:checked::after { transform: translateX(20px); }
+    .light-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      line-height: 1.45;
+      opacity: .66;
+    }
+    .version-badge {
+      position: absolute;
+      right: 10px;
+      bottom: calc(max(8px, env(safe-area-inset-bottom)) + 2px);
+      color: rgba(255,255,255,.7);
+      font-size: 10px;
+      letter-spacing: .03em;
+      text-shadow: 0 1px 3px rgba(0,0,0,.75);
+      pointer-events: none;
+    }
     .capture {
       width: 70px;
       height: 70px;
@@ -200,7 +289,36 @@
   <div id="ui">
     <div class="topbar">
       <div id="status" class="pill status">モデル読み込み中…</div>
-      <button id="resetBtn">位置を戻す</button>
+      <div class="top-actions">
+        <button id="lightBtn">照明</button>
+        <button id="resetBtn">位置を戻す</button>
+      </div>
+    </div>
+    <div id="lightPanel" aria-label="照明設定">
+      <div class="light-head">
+        <span>照明</span>
+        <button id="closeLightBtn">閉じる</button>
+      </div>
+      <div class="auto-row">
+        <span>AUTO（周囲に合わせる）</span>
+        <input id="autoLight" class="switch" type="checkbox" checked />
+      </div>
+      <div class="light-row">
+        <label for="lightPower">明るさ</label>
+        <input id="lightPower" type="range" min="0.3" max="3.5" step="0.05" value="2.2" />
+        <output id="lightPowerOut">2.20</output>
+      </div>
+      <div class="light-row">
+        <label for="lightAzimuth">左右</label>
+        <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" />
+        <output id="lightAzimuthOut">27°</output>
+      </div>
+      <div class="light-row">
+        <label for="lightElevation">上下</label>
+        <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" />
+        <output id="lightElevationOut">31°</output>
+      </div>
+      <p id="lightNote" class="light-note">AUTO中は、カメラ映像の平均色・明るさ・明るい方向を照明に反映します。</p>
     </div>
     <div id="hint" class="hint">
       「移動」：1本指で位置を移動<br>
@@ -216,6 +334,7 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
+    <div class="version-badge">Kani Camera v1.5</div>
   </div>
 
   <div id="preview">
