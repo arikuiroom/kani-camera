@@ -20,6 +20,10 @@ const closeFovBtn = document.getElementById('closeFovBtn');
 const fovRange = document.getElementById('fovRange');
 const fovOut = document.getElementById('fovOut');
 const resetFovBtn = document.getElementById('resetFovBtn');
+const colorBtn = document.getElementById('colorBtn');
+const colorPanel = document.getElementById('colorPanel');
+const closeColorBtn = document.getElementById('closeColorBtn');
+const colorChoices = [...document.querySelectorAll('.color-choice')];
 const autoLight = document.getElementById('autoLight');
 const lightPower = document.getElementById('lightPower');
 const lightPowerOut = document.getElementById('lightPowerOut');
@@ -190,16 +194,40 @@ function updateAdaptiveLighting(now) {
 // Albedo is color data. Metallic/Roughness are linear grayscale data.
 const textureLoader = new THREE.TextureLoader();
 
-const [albedoTexture, metallicTexture, roughnessTexture] = await Promise.all([
-  textureLoader.loadAsync('./textures/KA23_KanisanBurst_Albedo.png'),
+const [
+  redTexture,
+  mintTexture,
+  blackTexture,
+  darkBrownTexture,
+  redBrownTexture,
+  metallicTexture,
+  roughnessTexture
+] = await Promise.all([
+  textureLoader.loadAsync('./textures/KA23_Red_Albedo.png'),
+  textureLoader.loadAsync('./textures/KA23_Mint_Albedo.png'),
+  textureLoader.loadAsync('./textures/KA23_Black_Albedo.png'),
+  textureLoader.loadAsync('./textures/KA23_DarkBrown_Albedo.png'),
+  textureLoader.loadAsync('./textures/KA23_RedBrown_Albedo.png'),
   textureLoader.loadAsync('./textures/KA23_Solid_Metallic.png'),
   textureLoader.loadAsync('./textures/KA23_Solid_Roughness.png')
 ]);
 
-albedoTexture.colorSpace = THREE.SRGBColorSpace;
-albedoTexture.flipY = true;
+const colorTextures = {
+  red: redTexture,
+  mint: mintTexture,
+  black: blackTexture,
+  darkBrown: darkBrownTexture,
+  redBrown: redBrownTexture
+};
+
+for (const tex of Object.values(colorTextures)) {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = true;
+}
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
+
+let currentColorKey = 'red';
 
 // Reflection tuning.
 // Camera footage supplies live color/context, while a neutral fill prevents
@@ -286,6 +314,39 @@ function updateLiveEnvironment(now) {
   liveEnvMap.needsUpdate = true;
 }
 
+
+function setKaniColor(colorKey) {
+  const nextTexture = colorTextures[colorKey];
+  if (!nextTexture) return;
+
+  currentColorKey = colorKey;
+
+  if (model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of mats) {
+        mat.map = nextTexture;
+        mat.needsUpdate = true;
+      }
+    });
+  }
+
+  colorChoices.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.color === colorKey);
+  });
+
+  const selected = {
+    red: '赤',
+    mint: 'ミント',
+    black: '黒',
+    darkBrown: 'こげ茶',
+    redBrown: '赤茶'
+  }[colorKey];
+
+  if (selected) statusEl.textContent = `カラー：${selected}`;
+}
+
 const loader = new FBXLoader();
 loader.load(
   './models/CrabGuitarKA23_High.fbx',
@@ -300,7 +361,7 @@ loader.load(
       // Use one predictable PBR material so FBX material colors do not tint
       // the Albedo red. The supplied maps control color, metalness and roughness.
       const pbrMaterial = new THREE.MeshStandardMaterial({
-        map: albedoTexture,
+        map: colorTextures[currentColorKey],
         metalnessMap: metallicTexture,
         roughnessMap: roughnessTexture,
         // Slightly under 1.0 on purpose: keeps a small diffuse contribution
@@ -412,6 +473,7 @@ hideBtn.addEventListener('click', () => {
 lightBtn.addEventListener('click', () => {
   lightPanel.classList.toggle('open');
   fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
 });
 
 closeLightBtn.addEventListener('click', () => {
@@ -421,10 +483,27 @@ closeLightBtn.addEventListener('click', () => {
 fovBtn.addEventListener('click', () => {
   fovPanel.classList.toggle('open');
   lightPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
 });
 
 closeFovBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
+});
+
+colorBtn.addEventListener('click', () => {
+  colorPanel.classList.toggle('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+});
+
+closeColorBtn.addEventListener('click', () => {
+  colorPanel.classList.remove('open');
+});
+
+colorChoices.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setKaniColor(btn.dataset.color);
+  });
 });
 
 fovRange.addEventListener('input', () => {

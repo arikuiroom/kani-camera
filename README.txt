@@ -91,3 +91,18 @@ ENV_MIN_BRIGHTNESS
 - FOVパネルは「FOV」ボタンを押した時だけ表示されます。
 - iPhone SafariでFOVスライダーを操作できるよう、タッチ操作設定を明示しました。
 - バージョン表示を Kani Camera v1.6.1 に更新しました。
+
+
+■ v1.7 5色カラーバリエーション
+- 画面上部に「色」ボタンを追加しました。
+- 赤 / ミント / 黒 / こげ茶 / 赤茶 の5色を切り替えられます。
+- 色切り替えはAlbedoテクスチャのみを変更し、Metallic / Roughness / 照明 / 擬似環境反射は共通で使用します。
+- 初期色は「赤」です。
+- バージョン表示を Kani Camera v1.7 に更新しました。
+
+カラー割り当て:
+- 赤: KA23_Red_Albedo.png
+- ミント: KA23_Mint_Albedo.png
+- 黒: KA23_Black_Albedo.png
+- こげ茶: KA23_DarkBrown_Albedo.png
+- 赤茶: KA23_RedBrown_Albedo.png
