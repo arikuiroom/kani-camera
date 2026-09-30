@@ -2,15 +2,24 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 const video = document.getElementById('camera');
+const photoBackground = document.getElementById('photoBackground');
+const photoPicker = document.getElementById('photoPicker');
 const canvas = document.getElementById('three');
 const statusEl = document.getElementById('status');
 const hint = document.getElementById('hint');
 const startOverlay = document.getElementById('startOverlay');
 const startCameraBtn = document.getElementById('startCamera');
+const startPhotoBtn = document.getElementById('startPhoto');
 const captureBtn = document.getElementById('captureBtn');
 const resetBtn = document.getElementById('resetBtn');
 const flipBtn = document.getElementById('flipBtn');
 const hideBtn = document.getElementById('hideBtn');
+const inputBtn = document.getElementById('inputBtn');
+const inputPanel = document.getElementById('inputPanel');
+const closeInputBtn = document.getElementById('closeInputBtn');
+const switchCameraBtn = document.getElementById('switchCameraBtn');
+const pickPhotoBtn = document.getElementById('pickPhotoBtn');
+const photoModeBadge = document.getElementById('photoModeBadge');
 const lightBtn = document.getElementById('lightBtn');
 const lightPanel = document.getElementById('lightPanel');
 const closeLightBtn = document.getElementById('closeLightBtn');
@@ -40,8 +49,10 @@ const shareBtn = document.getElementById('shareBtn');
 const fallbackSave = document.getElementById('fallbackSave');
 const closePreview = document.getElementById('closePreview');
 
+let inputMode = 'camera';
 let facingMode = 'environment';
 let stream = null;
+let photoObjectUrl = null;
 let model = null;
 let modelVisible = true;
 let interactionMode = 'move';
@@ -133,13 +144,16 @@ function updateLightControlState() {
 }
 
 function updateAdaptiveLighting(now) {
-  if (!autoLightingEnabled || !video.videoWidth || !video.videoHeight) return;
+  const source = getActiveBackgroundSource();
+  if (!autoLightingEnabled || !source) return;
   if (now - lastLightSample < 400) return;
   lastLightSample = now;
 
   const w = lightSampleCanvas.width;
   const h = lightSampleCanvas.height;
-  lightSampleCtx.drawImage(video, 0, 0, w, h);
+  lightSampleCtx.clearRect(0, 0, w, h);
+  drawSourceCover(lightSampleCtx, source, w, h, false);
+  const data = lightSampleCtx.getImageData(0, 0, w, h).data;
   const data = lightSampleCtx.getImageData(0, 0, w, h).data;
 
   let r = 0, g = 0, b = 0, lumSum = 0;
@@ -190,6 +204,110 @@ function updateAdaptiveLighting(now) {
   lightPowerOut.textContent = key.intensity.toFixed(2);
 }
 
+
+function getActiveBackgroundSource() {
+  if (inputMode === 'photo' && photoBackground.naturalWidth > 0) return photoBackground;
+  if (video.videoWidth > 0 && video.videoHeight > 0) return video;
+  return null;
+}
+
+function getSourceMetrics(sourceEl) {
+  if (!sourceEl) return null;
+  if (sourceEl === video) {
+    return { width: video.videoWidth, height: video.videoHeight, mirror: facingMode === 'user' };
+  }
+  if (sourceEl === photoBackground) {
+    return { width: photoBackground.naturalWidth, height: photoBackground.naturalHeight, mirror: false };
+  }
+  return null;
+}
+
+function drawSourceCover(ctx, sourceEl, outW, outH, overrideMirror = null) {
+  const metrics = getSourceMetrics(sourceEl);
+  if (!metrics || !metrics.width || !metrics.height) return false;
+
+  const sw = metrics.width;
+  const sh = metrics.height;
+  const scale = Math.max(outW / sw, outH / sh);
+  const dw = sw * scale;
+  const dh = sh * scale;
+  const dx = (outW - dw) / 2;
+  const dy = (outH - dh) / 2;
+  const shouldMirror = overrideMirror ?? metrics.mirror;
+
+  if (shouldMirror) {
+    ctx.save();
+    ctx.translate(outW, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sourceEl, outW - dx - dw, dy, dw, dh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(sourceEl, dx, dy, dw, dh);
+  }
+
+  return true;
+}
+
+function closeTopPanels() {
+  inputPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+}
+
+function updateInputUI() {
+  const isCamera = inputMode === 'camera';
+  switchCameraBtn.classList.toggle('active', isCamera);
+  pickPhotoBtn.classList.toggle('active', !isCamera);
+  photoModeBadge.textContent = isCamera ? '選択' : '使用中';
+  photoModeBadge.style.opacity = isCamera ? '1' : '1';
+  flipBtn.disabled = !isCamera;
+}
+
+function stopCameraStream() {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  video.srcObject = null;
+}
+
+async function activateCameraMode() {
+  inputMode = 'camera';
+  photoBackground.style.display = 'none';
+  video.style.display = 'block';
+  updateInputUI();
+  closeTopPanels();
+  statusEl.textContent = 'カメラ起動中';
+  await startCamera();
+}
+
+function activatePhotoMode() {
+  inputMode = 'photo';
+  stopCameraStream();
+  video.style.display = 'none';
+  photoBackground.style.display = 'block';
+  updateInputUI();
+  closeTopPanels();
+  startOverlay.style.display = 'none';
+
+  if (photoBackground.naturalWidth > 0) {
+    statusEl.textContent = '写真モード';
+  } else {
+    statusEl.textContent = '写真を選択してください';
+  }
+}
+
+function setPhotoFromFile(file) {
+  if (!file) return;
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl);
+  photoObjectUrl = URL.createObjectURL(file);
+  photoBackground.src = photoObjectUrl;
+  photoBackground.onload = () => {
+    activatePhotoMode();
+    statusEl.textContent = '写真モード';
+  };
+}
 // ---- PBR textures ---------------------------------------------------------
 // Albedo is color data. Metallic/Roughness are linear grayscale data.
 const textureLoader = new THREE.TextureLoader();
@@ -257,12 +375,14 @@ liveEnvMap.needsUpdate = true;
 let lastEnvUpdate = 0;
 
 function updateLiveEnvironment(now) {
-  if (!video.videoWidth || !video.videoHeight) return;
+  const source = getActiveBackgroundSource();
+  const metrics = getSourceMetrics(source);
+  if (!source || !metrics) return;
   if (now - lastEnvUpdate < 250) return; // about 4 updates/sec
   lastEnvUpdate = now;
 
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
+  const vw = metrics.width;
+  const vh = metrics.height;
   const side = Math.min(vw, vh);
   const sxBase = (vw - side) * 0.5;
   const syBase = (vh - side) * 0.5;
@@ -290,10 +410,10 @@ function updateLiveEnvironment(now) {
     if (i % 2 === 1) {
       ctx.translate(ENV_SIZE, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
+      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     } else {
-      ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
+      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
     }
 
     ctx.filter = 'none';
@@ -439,9 +559,13 @@ async function startCamera() {
         height: { ideal: 1080 }
       }
     });
+    inputMode = 'camera';
+    video.style.display = 'block';
+    photoBackground.style.display = 'none';
     video.srcObject = stream;
     await video.play();
     startOverlay.style.display = 'none';
+    updateInputUI();
     statusEl.textContent = 'カメラ起動中';
   } catch (e) {
     console.error(e);
@@ -449,9 +573,16 @@ async function startCamera() {
   }
 }
 
-startCameraBtn.addEventListener('click', startCamera);
+startCameraBtn.addEventListener('click', activateCameraMode);
+startPhotoBtn.addEventListener('click', () => photoPicker.click());
+photoPicker.addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (file) setPhotoFromFile(file);
+  photoPicker.value = '';
+});
 
 flipBtn.addEventListener('click', async () => {
+  if (inputMode !== 'camera') return;
   facingMode = facingMode === 'environment' ? 'user' : 'environment';
   await startCamera();
 });
@@ -470,8 +601,28 @@ hideBtn.addEventListener('click', () => {
   hideBtn.textContent = modelVisible ? '隠す' : '表示';
 });
 
+inputBtn.addEventListener('click', () => {
+  inputPanel.classList.toggle('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+});
+
+closeInputBtn.addEventListener('click', () => {
+  inputPanel.classList.remove('open');
+});
+
+switchCameraBtn.addEventListener('click', () => {
+  activateCameraMode();
+});
+
+pickPhotoBtn.addEventListener('click', () => {
+  photoPicker.click();
+});
+
 lightBtn.addEventListener('click', () => {
   lightPanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
 });
@@ -482,6 +633,7 @@ closeLightBtn.addEventListener('click', () => {
 
 fovBtn.addEventListener('click', () => {
   fovPanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   colorPanel.classList.remove('open');
 });
@@ -492,6 +644,7 @@ closeFovBtn.addEventListener('click', () => {
 
 colorBtn.addEventListener('click', () => {
   colorPanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
 });
@@ -535,6 +688,7 @@ lightElevation.addEventListener('input', () => {
 
 updateLightLabels();
 updateLightControlState();
+updateInputUI();
 
 function setInteractionMode(mode) {
   interactionMode = mode;
@@ -612,8 +766,9 @@ function snapshotGesture() {
 }
 
 captureBtn.addEventListener('click', () => {
-  if (!video.videoWidth || !video.videoHeight) {
-    alert('カメラの準備ができていません。');
+  const source = getActiveBackgroundSource();
+  if (!source) {
+    alert(inputMode === 'photo' ? '写真を選択してください。' : 'カメラの準備ができていません。');
     return;
   }
 
@@ -628,8 +783,8 @@ captureBtn.addEventListener('click', () => {
 
   const ctx = out.getContext('2d');
 
-  // Draw video using "cover" crop to match object-fit: cover.
-  drawVideoCover(ctx, video, out.width, out.height);
+  // Draw current background using "cover" crop to match what the user sees.
+  drawSourceCover(ctx, source, out.width, out.height);
 
   // Render three.js at capture resolution and composite it.
   const oldSize = new THREE.Vector2();
@@ -697,22 +852,5 @@ closePreview.addEventListener('click', () => {
 });
 
 function drawVideoCover(ctx, videoEl, outW, outH) {
-  const vw = videoEl.videoWidth;
-  const vh = videoEl.videoHeight;
-  const scale = Math.max(outW / vw, outH / vh);
-  const dw = vw * scale;
-  const dh = vh * scale;
-  const dx = (outW - dw) / 2;
-  const dy = (outH - dh) / 2;
-
-  // Mirror the front camera preview so capture matches what the user sees.
-  if (facingMode === 'user') {
-    ctx.save();
-    ctx.translate(outW, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(videoEl, outW - dx - dw, dy, dw, dh);
-    ctx.restore();
-  } else {
-    ctx.drawImage(videoEl, dx, dy, dw, dh);
-  }
+  return drawSourceCover(ctx, videoEl, outW, outH);
 }
