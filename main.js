@@ -42,6 +42,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.0));
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -66,6 +68,14 @@ albedoTexture.colorSpace = THREE.SRGBColorSpace;
 albedoTexture.flipY = true;
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
+
+// Reflection tuning.
+// Camera footage supplies live color/context, while a neutral fill prevents
+// metallic areas from collapsing to black when the phone cannot see 360° around it.
+const CAMERA_ENV_BLEND = 0.68;
+const ENV_REFLECTION_INTENSITY = 1.15;
+const METALNESS_GAIN = 0.88;
+const ENV_MIN_BRIGHTNESS = 0.34;
 
 // ---- Pseudo live environment reflection ----------------------------------
 // The phone camera is only a forward-facing image, not a true 360° environment.
@@ -98,29 +108,46 @@ function updateLiveEnvironment(now) {
   const syBase = (vh - side) * 0.5;
 
   envCanvases.forEach((c, i) => {
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { alpha: false });
     ctx.save();
-    ctx.clearRect(0, 0, ENV_SIZE, ENV_SIZE);
+
+    // Neutral studio base: this is the important safety net that keeps metal
+    // reflective instead of turning black when camera coverage is incomplete.
+    const base = Math.round(255 * ENV_MIN_BRIGHTNESS);
+    ctx.fillStyle = `rgb(${base}, ${base}, ${base})`;
+    ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
     const shiftX = ((i % 3) - 1) * side * 0.12;
     const shiftY = (i >= 3 ? 1 : -1) * side * 0.06;
     const sx = Math.max(0, Math.min(vw - side, sxBase + shiftX));
     const sy = Math.max(0, Math.min(vh - side, syBase + shiftY));
 
-    // Mirror alternating faces to avoid all six faces being identical.
+    // Pull live color from the current camera image, but brighten/soften it
+    // because it is being used as lighting rather than as a literal screen.
+    ctx.globalAlpha = CAMERA_ENV_BLEND;
+    ctx.filter = 'brightness(1.35) saturate(0.92) blur(1.5px)';
+
     if (i % 2 === 1) {
       ctx.translate(ENV_SIZE, 0);
       ctx.scale(-1, 1);
+      ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else {
+      ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
     }
 
-    ctx.globalAlpha = 0.92;
-    ctx.drawImage(video, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
-
-    // Slight blur/softening: reflections should feel like lighting, not a TV screen.
-    ctx.globalAlpha = 0.18;
-    ctx.filter = 'blur(5px)';
-    ctx.drawImage(c, 0, 0, ENV_SIZE, ENV_SIZE);
     ctx.filter = 'none';
+
+    // Add a soft "window" highlight so chrome/metal always has something bright
+    // to reflect. Camera colors remain visible underneath it.
+    const grad = ctx.createLinearGradient(0, 0, ENV_SIZE, ENV_SIZE);
+    grad.addColorStop(0.0, 'rgba(255,255,255,0.42)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.10)');
+    grad.addColorStop(1.0, 'rgba(255,255,255,0.00)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
+
     ctx.restore();
   });
 
@@ -144,10 +171,12 @@ loader.load(
         map: albedoTexture,
         metalnessMap: metallicTexture,
         roughnessMap: roughnessTexture,
-        metalness: 1.0,
+        // Slightly under 1.0 on purpose: keeps a small diffuse contribution
+        // so very dark metallic texels do not collapse to pure black.
+        metalness: METALNESS_GAIN,
         roughness: 1.0,
         envMap: liveEnvMap,
-        envMapIntensity: 0.55
+        envMapIntensity: ENV_REFLECTION_INTENSITY
       });
 
       child.material = pbrMaterial;
