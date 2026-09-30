@@ -14,6 +14,12 @@ const hideBtn = document.getElementById('hideBtn');
 const lightBtn = document.getElementById('lightBtn');
 const lightPanel = document.getElementById('lightPanel');
 const closeLightBtn = document.getElementById('closeLightBtn');
+const fovBtn = document.getElementById('fovBtn');
+const fovPanel = document.getElementById('fovPanel');
+const closeFovBtn = document.getElementById('closeFovBtn');
+const fovRange = document.getElementById('fovRange');
+const fovOut = document.getElementById('fovOut');
+const resetFovBtn = document.getElementById('resetFovBtn');
 const autoLight = document.getElementById('autoLight');
 const lightPower = document.getElementById('lightPower');
 const lightPowerOut = document.getElementById('lightPowerOut');
@@ -39,8 +45,10 @@ let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
 
+const DEFAULT_FOV = 42;
+
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 100);
+const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({
@@ -403,10 +411,33 @@ hideBtn.addEventListener('click', () => {
 
 lightBtn.addEventListener('click', () => {
   lightPanel.classList.toggle('open');
+  fovPanel.classList.remove('open');
 });
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
+});
+
+fovBtn.addEventListener('click', () => {
+  fovPanel.classList.toggle('open');
+  lightPanel.classList.remove('open');
+});
+
+closeFovBtn.addEventListener('click', () => {
+  fovPanel.classList.remove('open');
+});
+
+fovRange.addEventListener('input', () => {
+  camera.fov = Number(fovRange.value);
+  camera.updateProjectionMatrix();
+  fovOut.textContent = `${Math.round(camera.fov)}°`;
+});
+
+resetFovBtn.addEventListener('click', () => {
+  camera.fov = DEFAULT_FOV;
+  camera.updateProjectionMatrix();
+  fovRange.value = String(DEFAULT_FOV);
+  fovOut.textContent = `${DEFAULT_FOV}°`;
 });
 
 autoLight.addEventListener('change', updateLightControlState);

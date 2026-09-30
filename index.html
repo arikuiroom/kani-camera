@@ -291,6 +291,7 @@
       <div id="status" class="pill status">モデル読み込み中…</div>
       <div class="top-actions">
         <button id="lightBtn">照明</button>
+        <button id="fovBtn">FOV</button>
         <button id="resetBtn">位置を戻す</button>
       </div>
     </div>
@@ -320,6 +321,21 @@
       </div>
       <p id="lightNote" class="light-note">AUTO中は、カメラ映像の平均色・明るさ・明るい方向を照明に反映します。</p>
     </div>
+    <div id="fovPanel" aria-label="FOV設定">
+      <div class="light-head">
+        <span>FOV</span>
+        <button id="closeFovBtn">閉じる</button>
+      </div>
+      <div class="light-row">
+        <label for="fovRange">FOV</label>
+        <input id="fovRange" type="range" min="20" max="80" step="1" value="42" />
+        <output id="fovOut">42°</output>
+      </div>
+      <div class="auto-row">
+        <span>初期値</span>
+        <button id="resetFovBtn">42°に戻す</button>
+      </div>
+    </div>
     <div id="hint" class="hint">
       「移動」：1本指で位置を移動<br>
       「3D回転」：1本指で向きを変更<br>
@@ -334,7 +350,7 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">Kani Camera v1.5</div>
+    <div class="version-badge">Kani Camera v1.6</div>
   </div>
 
   <div id="preview">
