@@ -1,130 +1,294 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
-const container = document.querySelector('#app');
-const status = document.querySelector('#status');
+const video = document.getElementById('camera');
+const canvas = document.getElementById('three');
+const statusEl = document.getElementById('status');
+const hint = document.getElementById('hint');
+const startOverlay = document.getElementById('startOverlay');
+const startCameraBtn = document.getElementById('startCamera');
+const captureBtn = document.getElementById('captureBtn');
+const resetBtn = document.getElementById('resetBtn');
+const flipBtn = document.getElementById('flipBtn');
+const hideBtn = document.getElementById('hideBtn');
+const preview = document.getElementById('preview');
+const previewImg = document.getElementById('previewImg');
+const saveLink = document.getElementById('saveLink');
+const closePreview = document.getElementById('closePreview');
+
+let facingMode = 'environment';
+let stream = null;
+let model = null;
+let modelVisible = true;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf2f2f2);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(0, 0, 5);
 
-const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.01, 1000);
-camera.position.set(2.7, 1.8, 4.2);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  alpha: true,
+  antialias: true,
+  preserveDrawingBuffer: true
+});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-container.appendChild(renderer.domElement);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.06;
-controls.target.set(0, 0.7, 0);
-controls.update();
-
-scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.0));
-
-const key = new THREE.DirectionalLight(0xffffff, 3.0);
-key.position.set(4, 6, 5);
-key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(2, 3, 4);
 scene.add(key);
 
 const fill = new THREE.DirectionalLight(0xffffff, 1.0);
-fill.position.set(-4, 2, -3);
+fill.position.set(-3, 1, 2);
 scene.add(fill);
 
-const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(3.5, 96),
-  new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.95 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
+const texture = await new THREE.TextureLoader().loadAsync('./textures/KA23_KanisanBurst_Albedo.png');
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = true;
 
-function frameObject(object) {
-  const box = new THREE.Box3().setFromObject(object);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-
-  object.position.x -= center.x;
-  object.position.y -= box.min.y;
-  object.position.z -= center.z;
-
-  const fitDistance = Math.max(maxDim * 2.0, 1.8);
-  camera.near = Math.max(fitDistance / 1000, 0.001);
-  camera.far = fitDistance * 100;
-  camera.position.set(fitDistance * 0.7, fitDistance * 0.45, fitDistance);
-  controls.target.set(0, size.y * 0.45, 0);
-  camera.updateProjectionMatrix();
-  controls.update();
-}
-
-// FBX内には元PC上の絶対パスが記録されているため、
-// どの形式でテクスチャURLが来てもローカルPNGへ差し替えます。
-const manager = new THREE.LoadingManager();
-manager.setURLModifier((url) => {
-  if (url.toLowerCase().includes('ka23_kanisanburst_albedo.png')) {
-    return './textures/KA23_KanisanBurst_Albedo.png';
-  }
-  return url;
-});
-
-manager.onError = (url) => {
-  console.warn('読み込み失敗:', url);
-};
-
-const loader = new FBXLoader(manager);
+const loader = new FBXLoader();
 loader.load(
   './models/CrabGuitarKA23_High.fbx',
-  (object) => {
-    object.traverse((child) => {
-      if (!child.isMesh) return;
-      child.castShadow = true;
-      child.receiveShadow = true;
+  (fbx) => {
+    model = fbx;
 
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      for (const material of materials) {
-        if (!material) continue;
-        if (material.map) {
-          material.map.colorSpace = THREE.SRGBColorSpace;
-          material.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-          material.map.needsUpdate = true;
-        }
-        material.needsUpdate = true;
-      }
+    model.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = false;
+      child.receiveShadow = false;
+
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        if (!mat) return;
+        mat.map = texture;
+        if (mat.color) mat.color.set(0xffffff);
+        mat.needsUpdate = true;
+      });
     });
 
-    scene.add(object);
-    frameObject(object);
-    status.textContent = 'カニギター読み込み完了';
+    // Center model and normalize scale.
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    model.position.sub(center);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const s = 2.2 / maxDim;
+    model.scale.setScalar(s);
+
+    // Put it in front of camera. Slightly tilted for a friendly initial view.
+    model.rotation.set(0.05, -0.2, -0.12);
+    model.position.set(0, 0, 0);
+    scene.add(model);
+
+    statusEl.textContent = 'カニギター準備完了';
+    setTimeout(() => { hint.style.opacity = '0'; }, 3500);
   },
-  (event) => {
-    if (event.total) {
-      status.textContent = `読み込み中… ${Math.round(event.loaded / event.total * 100)}%`;
-    }
-  },
-  (error) => {
-    console.error(error);
-    status.textContent = '読み込みに失敗しました（F12 → Console を確認）';
+  undefined,
+  (err) => {
+    console.error(err);
+    statusEl.textContent = 'モデル読み込み失敗';
   }
 );
 
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+function resize() {
+  const w = innerWidth;
+  const h = innerHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(w, h, false);
+}
+addEventListener('resize', resize);
+
+function render() {
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
+}
+render();
+
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert('このブラウザではカメラを利用できません。iPhoneではSafariでHTTPSページを開いてください。');
+    return;
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: facingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+    video.srcObject = stream;
+    await video.play();
+    startOverlay.style.display = 'none';
+    statusEl.textContent = 'カメラ起動中';
+  } catch (e) {
+    console.error(e);
+    alert('カメラを起動できませんでした。Safariのカメラ許可と、HTTPS接続を確認してください。');
+  }
+}
+
+startCameraBtn.addEventListener('click', startCamera);
+
+flipBtn.addEventListener('click', async () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  await startCamera();
 });
 
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
+resetBtn.addEventListener('click', () => {
+  if (!model) return;
+  model.position.set(0, 0, 0);
+  model.rotation.set(0.05, -0.2, -0.12);
+  model.scale.setScalar(model.scale.x / model.scale.x); // normalize below
+  // Recompute original normalized scale from bounding box.
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  if (maxDim > 0) {
+    const factor = 2.2 / maxDim;
+    model.scale.multiplyScalar(factor);
+  }
+});
+
+hideBtn.addEventListener('click', () => {
+  if (!model) return;
+  modelVisible = !modelVisible;
+  model.visible = modelVisible;
+  hideBtn.textContent = modelVisible ? '隠す' : '表示';
+});
+
+// Touch gestures:
+// 1 finger = move in screen plane
+// 2 fingers = pinch scale + rotate around Z
+const touches = new Map();
+let gestureStart = null;
+
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  gestureStart = snapshotGesture();
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!touches.has(e.pointerId) || !model) return;
+
+  const prev = touches.get(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (touches.size === 1) {
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    const k = 0.0045;
+    model.position.x += dx * k;
+    model.position.y -= dy * k;
+  } else if (touches.size >= 2) {
+    const current = snapshotGesture();
+    if (gestureStart && current) {
+      const scaleFactor = current.distance / gestureStart.distance;
+      model.scale.multiplyScalar(scaleFactor);
+      model.rotation.z += current.angle - gestureStart.angle;
+      gestureStart = current;
+    }
+  }
+});
+
+function endPointer(e) {
+  touches.delete(e.pointerId);
+  gestureStart = snapshotGesture();
 }
-animate();
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+function snapshotGesture() {
+  if (touches.size < 2) return null;
+  const pts = [...touches.values()].slice(0, 2);
+  const dx = pts[1].x - pts[0].x;
+  const dy = pts[1].y - pts[0].y;
+  return {
+    distance: Math.max(1, Math.hypot(dx, dy)),
+    angle: Math.atan2(dy, dx)
+  };
+}
+
+captureBtn.addEventListener('click', () => {
+  if (!video.videoWidth || !video.videoHeight) {
+    alert('カメラの準備ができていません。');
+    return;
+  }
+
+  const out = document.createElement('canvas');
+
+  // Match the current screen aspect ratio to what the user sees.
+  const cssW = innerWidth;
+  const cssH = innerHeight;
+  const ratio = Math.min(devicePixelRatio, 2);
+  out.width = Math.round(cssW * ratio);
+  out.height = Math.round(cssH * ratio);
+
+  const ctx = out.getContext('2d');
+
+  // Draw video using "cover" crop to match object-fit: cover.
+  drawVideoCover(ctx, video, out.width, out.height);
+
+  // Render three.js at capture resolution and composite it.
+  const oldSize = new THREE.Vector2();
+  renderer.getSize(oldSize);
+  const oldRatio = renderer.getPixelRatio();
+
+  renderer.setPixelRatio(1);
+  renderer.setSize(out.width, out.height, false);
+  camera.aspect = out.width / out.height;
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+
+  ctx.drawImage(renderer.domElement, 0, 0, out.width, out.height);
+
+  // Restore screen renderer.
+  renderer.setPixelRatio(oldRatio);
+  renderer.setSize(cssW, cssH, false);
+  camera.aspect = cssW / cssH;
+  camera.updateProjectionMatrix();
+
+  const url = out.toDataURL('image/png');
+  previewImg.src = url;
+  saveLink.href = url;
+  preview.style.display = 'flex';
+});
+
+closePreview.addEventListener('click', () => {
+  preview.style.display = 'none';
+});
+
+function drawVideoCover(ctx, videoEl, outW, outH) {
+  const vw = videoEl.videoWidth;
+  const vh = videoEl.videoHeight;
+  const scale = Math.max(outW / vw, outH / vh);
+  const dw = vw * scale;
+  const dh = vh * scale;
+  const dx = (outW - dw) / 2;
+  const dy = (outH - dh) / 2;
+
+  // Mirror the front camera preview so capture matches what the user sees.
+  if (facingMode === 'user') {
+    ctx.save();
+    ctx.translate(outW, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoEl, outW - dx - dw, dy, dw, dh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(videoEl, dx, dy, dw, dh);
+  }
+}

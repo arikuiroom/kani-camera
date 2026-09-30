@@ -2,20 +2,193 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>カニギター 3D Viewer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#111111" />
+  <title>カニギター カメラ</title>
   <style>
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #f2f2f2; }
-    #app { width: 100%; height: 100%; }
-    #info {
-      position: fixed; left: 16px; bottom: 16px; z-index: 10;
-      padding: 10px 12px; border-radius: 10px;
-      background: rgba(255,255,255,.84); color: #222;
-      font: 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      backdrop-filter: blur(8px); box-shadow: 0 3px 18px rgba(0,0,0,.12);
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
     }
-    #status { font-weight: 700; }
+    #camera {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #111;
+      z-index: 0;
+    }
+    #three {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+    #ui {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .topbar {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      left: 12px;
+      right: 12px;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pill, button {
+      border: 0;
+      border-radius: 999px;
+      background: rgba(0,0,0,.62);
+      color: white;
+      padding: 10px 14px;
+      font-size: 14px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 2px 12px rgba(0,0,0,.2);
+    }
+    .status { pointer-events: none; }
+    button { pointer-events: auto; }
+    .controls {
+      position: absolute;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      pointer-events: auto;
+    }
+    .capture {
+      width: 70px;
+      height: 70px;
+      padding: 0;
+      border: 5px solid rgba(255,255,255,.9);
+      background: rgba(255,255,255,.2);
+      box-shadow: 0 0 0 2px rgba(0,0,0,.35);
+    }
+    .hint {
+      position: absolute;
+      left: 50%;
+      top: 58%;
+      transform: translate(-50%, -50%);
+      color: white;
+      background: rgba(0,0,0,.48);
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.5;
+      max-width: 82vw;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+    #preview {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      background: rgba(0,0,0,.92);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px;
+    }
+    #preview img {
+      max-width: 100%;
+      max-height: 78vh;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.45);
+    }
+    .preview-actions { display: flex; gap: 10px; }
+    .preview-actions a {
+      text-decoration: none;
+      border-radius: 999px;
+      background: white;
+      color: #111;
+      padding: 10px 16px;
+      font-weight: 600;
+    }
+    #startOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(#2a2a2a,#111);
+      padding: 24px;
+    }
+    #startCard {
+      width: min(420px, 92vw);
+      padding: 24px;
+      border-radius: 24px;
+      background: rgba(255,255,255,.08);
+      color: white;
+      text-align: center;
+    }
+    #startCard h1 { margin: 0 0 10px; font-size: 24px; }
+    #startCard p { margin: 0 0 18px; line-height: 1.6; opacity: .88; }
+    #startCamera {
+      font-size: 17px;
+      padding: 14px 22px;
+      background: white;
+      color: #111;
+      font-weight: 700;
+    }
   </style>
+</head>
+<body>
+  <video id="camera" autoplay playsinline muted></video>
+  <canvas id="three"></canvas>
+
+  <div id="ui">
+    <div class="topbar">
+      <div id="status" class="pill status">モデル読み込み中…</div>
+      <button id="resetBtn">位置を戻す</button>
+    </div>
+    <div id="hint" class="hint">
+      1本指：カニギターを移動<br>
+      2本指：拡大縮小・回転
+    </div>
+    <div class="controls">
+      <button id="flipBtn">反転</button>
+      <button id="captureBtn" class="capture" aria-label="撮影"></button>
+      <button id="hideBtn">隠す</button>
+    </div>
+  </div>
+
+  <div id="preview">
+    <img id="previewImg" alt="撮影プレビュー" />
+    <div class="preview-actions">
+      <a id="saveLink" download="kani-guitar-photo.png">画像を保存</a>
+      <button id="closePreview">閉じる</button>
+    </div>
+  </div>
+
+  <div id="startOverlay">
+    <div id="startCard">
+      <h1>カニギター カメラ</h1>
+      <p>カメラ映像の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
+      <button id="startCamera">カメラを開始</button>
+    </div>
+  </div>
+
   <script type="importmap">
   {
     "imports": {
@@ -24,13 +197,6 @@
     }
   }
   </script>
-</head>
-<body>
-  <div id="app"></div>
-  <div id="info">
-    <div id="status">読み込み中…</div>
-    ドラッグ：回転 / ホイール：ズーム / 右ドラッグ：移動
-  </div>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

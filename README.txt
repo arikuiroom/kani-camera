@@ -1,30 +1,33 @@
-カニギター Three.js 3D Viewer
-============================
+カニギター カメラ重ね表示版
 
-この版には、FBX本体と Albedo テクスチャを同梱済みです。
-FBX内部には制作時PCの絶対パスが残っていますが、Three.js側で
-KA23_KanisanBurst_Albedo.png をローカルPNGへ自動的に差し替えるようにしています。
-
-■ 起動方法
-index.html を直接ダブルクリックするのではなく、ローカルWebサーバー経由で開いてください。
-
-Pythonが入っている場合：
-  1. このフォルダでターミナルを開く
-  2. python -m http.server 8000
-  3. ブラウザで http://localhost:8000 を開く
-
-VS Codeを使う場合：
-  Live Server拡張でもOKです。
+これは「本格AR（床面認識）」ではなく、
+iPhoneのカメラ映像の上にThree.jsの3Dカニギターを重ねるシンプル版です。
 
 ■ 操作
-左ドラッグ : 回転
-ホイール   : ズーム
-右ドラッグ : 平行移動
+- 1本指ドラッグ：カニギターを移動
+- 2本指：拡大縮小・回転
+- 反転：前面/背面カメラ切り替え
+- 撮影：カメラ映像と3Dを合成して画像化
+- 隠す：3Dモデルを一時的に非表示
+- 位置を戻す：初期位置へ
 
-■ ファイル
-models/CrabGuitarKA23_High.fbx
-textures/KA23_KanisanBurst_Albedo.png
+■ PCで試す
+このフォルダでコマンドプロンプトを開き、
+    python -m http.server 8000
+を実行して
+    http://localhost:8000
+を開いてください。
 
-■ 補足
-次の段階では、FBXをGLBへ変換するとWeb公開用としてさらに扱いやすくなります。
-GLBならモデル・マテリアル・テクスチャを1ファイルにまとめやすく、読み込みもシンプルになります。
+■ iPhoneで試す際の重要事項
+iPhoneのSafariでカメラを使うには、原則HTTPSで公開されたページが必要です。
+PCの localhost はPC自身では動きますが、同じWi-FiのiPhoneから
+http://PCのIP:8000 にアクセスしても、カメラAPIはブロックされることがあります。
+
+手軽な実機テスト方法:
+- GitHub Pages
+- Netlify
+- Cloudflare Pages
+- Vercel
+など、HTTPSで静的サイトを公開できるサービスにこのフォルダ一式を置く。
+
+※ Three.js本体はCDNから読み込みます。オフラインでは動きません。
