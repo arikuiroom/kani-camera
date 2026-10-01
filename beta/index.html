@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.17 beta</title>
+<title>カニギター カメラ v1.20.18 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -627,14 +627,59 @@
       #flipBtn {
         left: auto;
         right: max(18px, env(safe-area-inset-right));
-        bottom: max(18px, env(safe-area-inset-bottom));
+        top: max(18px, env(safe-area-inset-top));
+        bottom: auto;
       }
-      .mode-switch {
+      .controls {
         left: auto;
         right: max(18px, env(safe-area-inset-right));
         top: 50%;
         bottom: auto;
         transform: translateY(-50%);
+      }
+      .mode-switch {
+        left: auto;
+        right: max(18px, env(safe-area-inset-right));
+        top: 28%;
+        bottom: auto;
+        transform: translateY(-50%);
+      }
+      #morePanel,
+      #lightPanel, #fovPanel, #colorPanel, #inputPanel,
+      #shadowPanel, #blendPanel, #floorPanel, #savePanel {
+        top: max(12px, env(safe-area-inset-top));
+        left: calc(max(8px, env(safe-area-inset-left)) + 82px);
+        right: auto;
+        width: min(310px, calc(100vw - 120px));
+      }
+      #morePanel {
+        width: min(290px, calc(100vw - 120px));
+      }
+      #preview {
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: max(18px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+      }
+      #preview img {
+        max-width: calc(68vw - 44px);
+        max-height: calc(100dvh - 36px);
+      }
+      #preview .preview-side {
+        width: min(300px, 28vw);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      #preview .preview-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #preview .preview-format-grid {
+        justify-content: center;
+        flex-wrap: wrap;
       }
     }
   </style>
@@ -663,7 +708,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.17 beta</div>
+      <div class="menu-version">Kani Camera v1.20.18 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -881,25 +926,27 @@
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
-    <div class="preview-actions">
-      <button id="shareBtn">カニギター写真を保存</button>
-      <button id="shareBackgroundBtn">背景のみ保存</button>
-      <a id="fallbackSave" download="kani-guitar-photo.jpg">合成写真をファイル保存</a>
-      <a id="fallbackBackgroundSave" download="kani-guitar-background.jpg">背景写真をファイル保存</a>
-      <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
-    </div>
-    <p id="saveHelp">保存解像度：—</p>
-    <div class="format-grid preview-format-grid" aria-label="保存形式">
-      <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
-      <button id="previewFormatPngBtn" class="format-choice">PNG</button>
-      <button id="savePsdBtn">PSD（レイヤー付き）</button>
+    <div class="preview-side">
+      <div class="preview-actions">
+        <button id="shareBtn">カニギター写真を保存</button>
+        <button id="shareBackgroundBtn">背景のみ保存</button>
+        <a id="fallbackSave" download="kani-guitar-photo.jpg">合成写真をファイル保存</a>
+        <a id="fallbackBackgroundSave" download="kani-guitar-background.jpg">背景写真をファイル保存</a>
+        <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
+      </div>
+      <p id="saveHelp">保存解像度：—</p>
+      <div class="format-grid preview-format-grid" aria-label="保存形式">
+        <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
+        <button id="previewFormatPngBtn" class="format-choice">PNG</button>
+        <button id="savePsdBtn">PSD（レイヤー付き）</button>
+      </div>
     </div>
   </div>
 
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.17 beta</div>
+      <div class="start-version">Kani Camera v1.20.18 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
