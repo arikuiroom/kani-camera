@@ -1208,9 +1208,12 @@ function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
     longPressed = false;
     holdTimer = setTimeout(() => {
       longPressed = true;
+      const wasOpen = panel.classList.contains('open');
       closeAdjustmentPanels(panel);
-      panel.classList.add('open');
-      if (afterOpen) afterOpen();
+      if (!wasOpen) {
+        panel.classList.add('open');
+        if (afterOpen) afterOpen();
+      }
       if (navigator.vibrate) navigator.vibrate(15);
     }, HOLD_MS);
   });
