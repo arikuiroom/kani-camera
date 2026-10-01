@@ -97,6 +97,7 @@ const shareBackgroundBtn = document.getElementById('shareBackgroundBtn');
 const fallbackSave = document.getElementById('fallbackSave');
 const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
+const saveHelp = document.getElementById('saveHelp');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -1737,6 +1738,7 @@ captureBtn.addEventListener('click', () => {
     fallbackSave.href = lastCaptureUrl;
     fallbackSave.style.display = 'none';
     preview.style.display = 'flex';
+    saveHelp.textContent = `保存解像度：${outW} × ${outH} px`;
     statusEl.textContent = `保存画像 ${outW}×${outH}px`;
   }, 'image/png');
 });
