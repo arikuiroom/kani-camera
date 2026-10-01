@@ -209,6 +209,12 @@ function updateVirtualFloor() {
   floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
   key.shadow.radius = 1 + floorShadowSoftnessState * 18;
   key.shadow.blurSamples = Math.round(4 + floorShadowSoftnessState * 20);
+
+  // Keep the shadow-light target near the virtual floor/contact point.
+  // This prevents the caster from drifting outside the useful shadow frustum
+  // when easy placement moves the subject up/down the screen.
+  key.target.position.set(model ? model.position.x : 0, floorYState, model ? model.position.z : 0);
+  key.target.updateMatrixWorld();
 }
 
 function updateFloorLabels() {
@@ -241,14 +247,37 @@ function screenYToWorldY(clientY, worldZ = -0.25) {
 
 function placeFloorAtScreenPoint(clientX, clientY) {
   setFloorPointMarker(clientX, clientY);
-  floorYState = THREE.MathUtils.clamp(screenYToWorldY(clientY), -2.0, 1.0);
-  floorY.value = floorYState.toFixed(2);
+
+  // Keep the floor/model relationship that already produces a valid projected
+  // shadow, and move that contacted pair vertically to the tapped screen point.
+  // v1.13.2 instead recomputed an absolute floor Y from a screen-parallel plane;
+  // that could move the receiver away from the caster/light and make the real
+  // shadow disappear.
+  if (model) {
+    const box = new THREE.Box3().setFromObject(model);
+    if (!box.isEmpty()) {
+      const currentContactY = box.min.y;
+      const targetY = THREE.MathUtils.clamp(screenYToWorldY(clientY), -2.0, 1.0);
+      const deltaY = targetY - currentContactY;
+      model.position.y += deltaY;
+      floorYState += deltaY;
+      floorYState = THREE.MathUtils.clamp(floorYState, -2.0, 1.0);
+      floorY.value = floorYState.toFixed(2);
+    }
+  }
+
+  // Easy mode intentionally uses the stable horizontal receiver. Perspective
+  // tilt remains available only in the detailed controls.
+  floorTiltState = 0;
+  floorTilt.value = '0';
+  floorShadowEnabledState = true;
+  floorShadowEnabled.checked = true;
   updateFloorLabels();
   updateVirtualFloor();
-  snapModelToFloor();
+
   floorPointPlacementMode = false;
   placeFloorPointBtn.textContent = '接地点を置く';
-  statusEl.textContent = '接地点に床を合わせました';
+  statusEl.textContent = '接地点に床と影を合わせました';
   setTimeout(() => floorPointMarker.classList.remove('active'), 1400);
 }
 
