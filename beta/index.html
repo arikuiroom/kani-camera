@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.18 beta</title>
+<title>カニギター カメラ v1.20.19 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -605,17 +605,39 @@
     }
     #startCard h1 { margin: 0 0 10px; font-size: 28px; }
 
-    /* Landscape: rotate the complete portrait UI coordinate system.
-       Buttons and menus keep the same portrait-relative positions. */
+    /* iPhone Camera-style landscape behavior:
+       controls stay at the same screen coordinates; only their contents rotate. */
     @media (orientation: landscape) {
-      #ui {
-        width: 100dvh;
-        height: 100vw;
-        inset: auto;
-        left: 0;
-        top: 0;
-        transform-origin: top left;
-        transform: translateX(100vw) rotate(90deg);
+      .top-actions > button,
+      #flipBtn,
+      #resetBtn,
+      .mode-switch > button {
+        writing-mode: horizontal-tb;
+      }
+      .top-actions > button,
+      #flipBtn,
+      #resetBtn {
+        transform: rotate(90deg);
+        transform-origin: center;
+      }
+      .mode-switch > button {
+        transform: rotate(90deg);
+        transform-origin: center;
+      }
+
+      /* Panels keep their portrait anchor/box position.
+         Rotate the panel contents rather than moving the panel itself. */
+      #morePanel > *,
+      #lightPanel > *,
+      #fovPanel > *,
+      #colorPanel > *,
+      #inputPanel > *,
+      #shadowPanel > *,
+      #blendPanel > *,
+      #floorPanel > *,
+      #savePanel > * {
+        transform: rotate(90deg);
+        transform-origin: center;
       }
     }
   </style>
@@ -644,7 +666,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.18 beta</div>
+      <div class="menu-version">Kani Camera v1.20.19 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -880,7 +902,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.18 beta</div>
+      <div class="start-version">Kani Camera v1.20.19 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
