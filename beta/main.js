@@ -494,23 +494,16 @@ photoPicker.addEventListener('change', (e) => {
 // Albedo is color data. Metallic/Roughness are linear grayscale data.
 const textureLoader = new THREE.TextureLoader();
 
-const [
-  redTexture,
-  mintTexture,
-  blackTexture,
-  darkBrownTexture,
-  redBrownTexture,
-  metallicTexture,
-  roughnessTexture
-] = await Promise.all([
-  textureLoader.loadAsync('../textures/KA23_Red_Albedo.png'),
-  textureLoader.loadAsync('../textures/KA23_Mint_Albedo.png'),
-  textureLoader.loadAsync('../textures/KA23_Black_Albedo.png'),
-  textureLoader.loadAsync('../textures/KA23_DarkBrown_Albedo.png'),
-  textureLoader.loadAsync('../textures/KA23_RedBrown_Albedo.png'),
-  textureLoader.loadAsync('../textures/KA23_Solid_Metallic.png'),
-  textureLoader.loadAsync('../textures/KA23_Solid_Roughness.png')
-]);
+// Start texture downloads without blocking the rest of the module.
+// Previously the top-level await here meant that, after the camera opened,
+// most controls had no event listeners until every texture finished loading.
+const redTexture = textureLoader.load('../textures/KA23_Red_Albedo.png');
+const mintTexture = textureLoader.load('../textures/KA23_Mint_Albedo.png');
+const blackTexture = textureLoader.load('../textures/KA23_Black_Albedo.png');
+const darkBrownTexture = textureLoader.load('../textures/KA23_DarkBrown_Albedo.png');
+const redBrownTexture = textureLoader.load('../textures/KA23_RedBrown_Albedo.png');
+const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
+const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
 
 const colorTextures = {
   red: redTexture,
