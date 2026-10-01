@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#111111" />
-  <title>カニギター カメラ v1.8.2</title>
+  <meta name="theme-color" content="#111111" />\n  <meta name="apple-mobile-web-app-title" content="カニギター" />\n  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />\n  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png" />\n  <link rel="manifest" href="./manifest.webmanifest" />
+  <title>カニギター カメラ v1.9</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -66,7 +66,7 @@
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 2px 12px rgba(0,0,0,.2);
     }
-    .status { pointer-events: none; }
+    .status { pointer-events: none; }\n    .start-version {\n      margin-top: -4px;\n      margin-bottom: 12px;\n      text-align: center;\n      font-size: 14px;\n      color: rgba(255,255,255,.72);\n      letter-spacing: .02em;\n    }
     button { pointer-events: auto; }
     .controls {
       position: absolute;
@@ -504,7 +504,7 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">Kani Camera v1.8.2</div>
+    <div class="version-badge">Kani Camera v1.9</div>
   </div>
 
   <div id="preview">
@@ -519,7 +519,7 @@
 
   <div id="startOverlay">
     <div id="startCard">
-      <h1>カニギター カメラ v1.8.2</h1>
+      <h1>カニギター カメラ</h1>\n      <div class="start-version">Kani Camera v1.9</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
