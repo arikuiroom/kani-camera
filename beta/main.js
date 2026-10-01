@@ -48,7 +48,10 @@ const shadowOffsetOut = document.getElementById('shadowOffsetOut');
 const floorBtn = document.getElementById('floorBtn');
 const floorPanel = document.getElementById('floorPanel');
 const closeFloorBtn = document.getElementById('closeFloorBtn');
-const placeFloorPointBtn = document.getElementById('placeFloorPointBtn');
+const shadowDirection = document.getElementById('shadowDirection');
+const shadowDirectionOut = document.getElementById('shadowDirectionOut');
+const shadowLength = document.getElementById('shadowLength');
+const shadowLengthOut = document.getElementById('shadowLengthOut');
 const floorPointMarker = document.getElementById('floorPointMarker');
 const toggleFloorDetailsBtn = document.getElementById('toggleFloorDetailsBtn');
 const floorDetails = document.getElementById('floorDetails');
@@ -161,9 +164,12 @@ let floorTiltState = 0;
 let floorShadowOpacityState = 0.42;
 let floorShadowSoftnessState = 0.45;
 let floorGuideEnabledState = false;
-let floorPointPlacementMode = false;
+let floorPointPlacementMode = false; // legacy detailed mode only
 let floorPointX = innerWidth * 0.5;
 let floorPointY = innerHeight * 0.70;
+let shadowDirectionState = -35;
+let shadowLengthState = 0.55;
+let manualShadowShapeEnabled = true;
 let suppressFloorGuideForCapture = false;
 
 function ensureVirtualFloor() {
@@ -222,6 +228,27 @@ function updateFloorLabels() {
   floorTiltOut.textContent = `${Math.round(floorTiltState)}°`;
   floorShadowOpacityOut.textContent = floorShadowOpacityState.toFixed(2);
   floorShadowSoftnessOut.textContent = floorShadowSoftnessState.toFixed(2);
+  shadowDirectionOut.textContent = `${Math.round(shadowDirectionState)}°`;
+  shadowLengthOut.textContent = shadowLengthState.toFixed(2);
+}
+
+function updateShadowFromDirectControls() {
+  if (!manualShadowShapeEnabled || !model) return;
+
+  // Keep the receiver plane stable. The user edits the visible result instead:
+  // direction = light azimuth opposite the desired shadow,
+  // length = light elevation (lower light => longer projected shadow).
+  const dir = THREE.MathUtils.degToRad(shadowDirectionState + 180);
+  const elevationDeg = THREE.MathUtils.lerp(72, 12, THREE.MathUtils.clamp((shadowLengthState - 0.15) / 1.65, 0, 1));
+  const el = THREE.MathUtils.degToRad(elevationDeg);
+  const radius = 5;
+  const cosEl = Math.cos(el);
+  const target = key.target.position;
+  key.position.set(
+    target.x + Math.sin(dir) * cosEl * radius,
+    target.y + Math.sin(el) * radius,
+    target.z + Math.cos(dir) * cosEl * radius
+  );
 }
 
 function setFloorPointMarker(clientX, clientY) {
@@ -276,7 +303,6 @@ function placeFloorAtScreenPoint(clientX, clientY) {
   updateVirtualFloor();
 
   floorPointPlacementMode = false;
-  placeFloorPointBtn.textContent = '接地点を置く';
   statusEl.textContent = '接地点に床と影を合わせました';
   setTimeout(() => floorPointMarker.classList.remove('active'), 1400);
 }
@@ -874,6 +900,8 @@ loader.load(
     model.position.set(0, 0, 0);
     scene.add(model);
     updateGroundShadow();
+    updateVirtualFloor();
+    updateShadowFromDirectControls();
 
     statusEl.textContent = 'カニギター準備完了';
     setTimeout(() => { hint.style.opacity = '0'; }, 3500);
@@ -898,6 +926,7 @@ function render(now = 0) {
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
   updateGroundShadow();
+  updateShadowFromDirectControls();
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
@@ -1041,12 +1070,16 @@ closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
 });
 
-placeFloorPointBtn.addEventListener('click', () => {
-  floorPointPlacementMode = true;
-  floorPanel.classList.remove('open');
-  placeFloorPointBtn.textContent = '画面をタップ…';
-  setFloorPointMarker(floorPointX, floorPointY);
-  statusEl.textContent = '床の接地点をタップしてください';
+shadowDirection.addEventListener('input', () => {
+  shadowDirectionState = Number(shadowDirection.value);
+  updateFloorLabels();
+  updateShadowFromDirectControls();
+});
+
+shadowLength.addEventListener('input', () => {
+  shadowLengthState = Number(shadowLength.value);
+  updateFloorLabels();
+  updateShadowFromDirectControls();
 });
 
 toggleFloorDetailsBtn.addEventListener('click', () => {
