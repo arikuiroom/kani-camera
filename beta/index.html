@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.24 beta</title>
+<title>カニギター カメラ v1.20.16 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -604,109 +604,6 @@
       text-align: center;
     }
     #startCard h1 { margin: 0 0 10px; font-size: 28px; }
-
-    /* Landscape-left: portrait UI rotated with the physical phone.
-       Top settings become the left rail; bottom capture controls become right rail. */
-    @media (orientation: landscape) {
-      .topbar {
-        top: 12px;
-        bottom: 12px;
-        left: max(4px, calc(env(safe-area-inset-left) - 10px));
-        right: auto;
-        width: auto;
-        height: auto;
-        align-items: stretch;
-      }
-      .top-actions {
-        width: auto;
-        height: 100%;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: center;
-        gap: 4px;
-      }
-      .top-actions > button {
-        transform: rotate(90deg);
-        transform-origin: center;
-      }
-
-      .controls {
-        left: auto;
-        right: max(18px, env(safe-area-inset-right));
-        top: 50%;
-        bottom: auto;
-        transform: translateY(-50%);
-      }
-      .controls > * {
-        transform: rotate(90deg);
-        transform-origin: center;
-      }
-
-      .mode-switch {
-        left: auto;
-        right: max(18px, env(safe-area-inset-right));
-        top: 29%;
-        bottom: auto;
-        transform: translateY(-50%) rotate(90deg);
-        transform-origin: center;
-      }
-
-      #flipBtn {
-        left: auto;
-        right: max(20px, env(safe-area-inset-right));
-        bottom: auto;
-        top: 14px;
-        transform: rotate(90deg);
-      }
-      #resetBtn {
-        left: auto;
-        right: max(20px, env(safe-area-inset-right));
-        bottom: 14px;
-        transform: rotate(90deg);
-      }
-
-      #morePanel,
-      #lightPanel,
-      #fovPanel,
-      #colorPanel,
-      #inputPanel,
-      #shadowPanel,
-      #blendPanel,
-      #floorPanel,
-      #savePanel {
-        top: 12px;
-        right: auto;
-        left: 74px;
-        transform: rotate(90deg) translateY(-100%);
-        transform-origin: top left;
-      }
-      #preview {
-        flex-direction: row;
-        align-items: center;
-        justify-content: center;
-        gap: 22px;
-        padding: max(18px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-      }
-      #preview img {
-        max-width: calc(68vw - 44px);
-        max-height: calc(100dvh - 36px);
-      }
-      #preview .preview-side {
-        width: min(300px, 28vw);
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-      }
-      #preview .preview-actions {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      #preview .preview-format-grid {
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-    }
   </style>
 </head>
 <body>
@@ -721,7 +618,7 @@
       <div class="top-actions">
         <button id="fovBtn">パース</button>
         <button id="blendBtn" class="quick-toggle active" aria-label="タップで調整メニューを開閉">なじみ</button>
-        <button id="lightBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">照明</button>
+        <button id="lightBtn" class="quick-toggle" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
         <button id="shadowBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">丸影</button>
         <button id="floorBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">床</button>
         <button id="moreBtn" aria-label="その他のメニュー">•••</button>
@@ -733,7 +630,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.24 beta</div>
+      <div class="menu-version">Kani Camera v1.20.16 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -951,27 +848,25 @@
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
-    <div class="preview-side">
-      <div class="preview-actions">
-        <button id="shareBtn">カニギター写真を保存</button>
-        <button id="shareBackgroundBtn">背景のみ保存</button>
-        <a id="fallbackSave" download="kani-guitar-photo.jpg">合成写真をファイル保存</a>
-        <a id="fallbackBackgroundSave" download="kani-guitar-background.jpg">背景写真をファイル保存</a>
-        <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
-      </div>
-      <p id="saveHelp">保存解像度：—</p>
-      <div class="format-grid preview-format-grid" aria-label="保存形式">
-        <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
-        <button id="previewFormatPngBtn" class="format-choice">PNG</button>
-        <button id="savePsdBtn">PSD（レイヤー付き）</button>
-      </div>
+    <div class="preview-actions">
+      <button id="shareBtn">カニギター写真を保存</button>
+      <button id="shareBackgroundBtn">背景のみ保存</button>
+      <a id="fallbackSave" download="kani-guitar-photo.jpg">合成写真をファイル保存</a>
+      <a id="fallbackBackgroundSave" download="kani-guitar-background.jpg">背景写真をファイル保存</a>
+      <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
+    </div>
+    <p id="saveHelp">保存解像度：—</p>
+    <div class="format-grid preview-format-grid" aria-label="保存形式">
+      <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
+      <button id="previewFormatPngBtn" class="format-choice">PNG</button>
+      <button id="savePsdBtn">PSD（レイヤー付き）</button>
     </div>
   </div>
 
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.24 beta</div>
+      <div class="start-version">Kani Camera v1.20.16 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
