@@ -204,7 +204,7 @@ function getCaptureViewport() {
   const freeY = Math.max(0, screenH - height);
   // In portrait, push the 16:9 camera frame down so the entire top control
   // row sits on the black band. Keep a small bottom band for the shutter UI.
-  const top = portrait ? freeY : freeY * 0.5;
+  const top = portrait ? freeY + 28 : freeY * 0.5;
   return {
     width,
     height,
