@@ -201,11 +201,16 @@ function getCaptureViewport() {
     height = screenH;
     width = height * aspect;
   }
+  const freeY = Math.max(0, screenH - height);
+  // Keep the 16:9 capture unchanged, but place it lower on screen so the
+  // top controls sit mostly over the black margin instead of the photo.
+  // 70% of the spare vertical space is above the image, 30% below it.
+  const top = portrait ? freeY * 0.70 : freeY * 0.5;
   return {
     width,
     height,
     left: (screenW - width) / 2,
-    top: (screenH - height) / 2,
+    top,
     portrait
   };
 }
