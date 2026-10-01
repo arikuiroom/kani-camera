@@ -307,6 +307,18 @@ function setPhotoFromFile(file) {
     statusEl.textContent = '写真モード';
   };
 }
+
+// START INPUT LISTENERS EARLY
+// Register these before the texture await so the start screen remains usable
+// even while large textures are still loading on mobile networks.
+startCameraBtn.addEventListener('click', activateCameraMode);
+startPhotoBtn.addEventListener('click', () => photoPicker.click());
+photoPicker.addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (file) setPhotoFromFile(file);
+  photoPicker.value = '';
+});
+
 // ---- PBR textures ---------------------------------------------------------
 // Albedo is color data. Metallic/Roughness are linear grayscale data.
 const textureLoader = new THREE.TextureLoader();
@@ -571,14 +583,6 @@ async function startCamera() {
     alert('カメラを起動できませんでした。Safariのカメラ許可と、HTTPS接続を確認してください。');
   }
 }
-
-startCameraBtn.addEventListener('click', activateCameraMode);
-startPhotoBtn.addEventListener('click', () => photoPicker.click());
-photoPicker.addEventListener('change', (e) => {
-  const file = e.target.files?.[0];
-  if (file) setPhotoFromFile(file);
-  photoPicker.value = '';
-});
 
 flipBtn.addEventListener('click', async () => {
   if (inputMode !== 'camera') return;
