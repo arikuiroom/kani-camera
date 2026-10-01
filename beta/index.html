@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.18.1 beta</title>
+<title>カニギター カメラ v1.18.2 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -170,12 +170,12 @@
       width: 190px;
       padding: 8px;
       border-radius: 16px;
-      background: rgba(12,12,12,.48);
+      background: rgba(12,12,12,.24);
       color: white;
       pointer-events: auto;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 6px 24px rgba(0,0,0,.16);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
     #morePanel.open { display: grid; gap: 6px; }
     #morePanel button {
@@ -210,12 +210,12 @@
       width: min(310px, calc(100vw - 24px));
       padding: 14px;
       border-radius: 18px;
-      background: rgba(12,12,12,.48);
+      background: rgba(12,12,12,.24);
       color: white;
       pointer-events: auto;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 6px 24px rgba(0,0,0,.16);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
     #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open { display: block; }
 
@@ -757,25 +757,25 @@
     </div>
     <button id="flipBtn">カメラ切替</button>
     <button id="resetBtn" aria-label="位置を戻す">↶<br>リセット</button>
-    <div class="version-badge">Kani Camera v1.18.1 beta</div>
+    <div class="version-badge">Kani Camera v1.18.2 beta</div>
   </div>
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-actions">
-      <button id="shareBtn">合成写真を保存</button>
-      <button id="shareBackgroundBtn">背景写真を保存</button>
+      <button id="shareBtn">カニギター写真を保存</button>
+      <button id="shareBackgroundBtn">背景のみ保存</button>
       <a id="fallbackSave" download="kani-guitar-photo.png">合成写真をファイル保存</a>
       <a id="fallbackBackgroundSave" download="kani-guitar-background.png">背景写真をファイル保存</a>
-      <button id="closePreview">閉じる</button>
+      <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
     </div>
-    <p id="saveHelp">保存画像は長辺約3000px。カニギターは高解像度でレンダリングして縮小し、輪郭をなめらかにしています。</p>
+    <p id="saveHelp">保存解像度：—</p>
   </div>
 
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.18.1 beta</div>
+      <div class="start-version">Kani Camera v1.18.2 beta</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
