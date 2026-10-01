@@ -98,6 +98,11 @@ const fallbackSave = document.getElementById('fallbackSave');
 const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
 const saveHelp = document.getElementById('saveHelp');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const savePanel = document.getElementById('savePanel');
+const closeSaveBtn = document.getElementById('closeSaveBtn');
+const formatJpegBtn = document.getElementById('formatJpegBtn');
+const formatPngBtn = document.getElementById('formatPngBtn');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -111,6 +116,19 @@ let lastCaptureBlob = null;
 let lastCaptureUrl = null;
 let lastBackgroundBlob = null;
 let lastBackgroundUrl = null;
+let saveFormat = 'jpeg';
+const JPEG_QUALITY = 0.92;
+
+function getSaveMime() {
+  return saveFormat === 'png' ? 'image/png' : 'image/jpeg';
+}
+function getSaveExtension() {
+  return saveFormat === 'png' ? 'png' : 'jpg';
+}
+function syncSaveFormatUI() {
+  formatJpegBtn.classList.toggle('active', saveFormat === 'jpeg');
+  formatPngBtn.classList.toggle('active', saveFormat === 'png');
+}
 
 const DEFAULT_FOV = 42;
 
@@ -763,6 +781,7 @@ function closeTopPanels() {
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
+  savePanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -1637,6 +1656,22 @@ function snapshotGesture() {
   };
 }
 
+saveSettingsBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  savePanel.classList.add('open');
+  syncSaveFormatUI();
+});
+closeSaveBtn.addEventListener('click', () => savePanel.classList.remove('open'));
+formatJpegBtn.addEventListener('click', () => {
+  saveFormat = 'jpeg';
+  syncSaveFormatUI();
+});
+formatPngBtn.addEventListener('click', () => {
+  saveFormat = 'png';
+  syncSaveFormatUI();
+});
+
 captureBtn.addEventListener('click', () => {
   lastBackgroundBlob = null;
   if (lastBackgroundUrl) {
@@ -1753,7 +1788,7 @@ captureBtn.addEventListener('click', () => {
     lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
     fallbackBackgroundSave.href = lastBackgroundUrl;
     fallbackBackgroundSave.style.display = 'none';
-  }, 'image/png');
+  }, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
 
   out.toBlob((blob) => {
     if (!blob) {
@@ -1770,14 +1805,14 @@ captureBtn.addEventListener('click', () => {
     fallbackSave.href = lastCaptureUrl;
     fallbackSave.style.display = 'none';
     preview.style.display = 'flex';
-    saveHelp.textContent = `保存解像度：${outW} × ${outH} px`;
+    saveHelp.textContent = `保存解像度：${outW} × ${outH} px / ${saveFormat === 'png' ? 'PNG' : 'JPEG'}`;
     statusEl.textContent = `保存画像 ${outW}×${outH}px`;
-  }, 'image/png');
+  }, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
 });
 
 async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
   if (!blob) return;
-  const file = new File([blob], filename, { type: 'image/png' });
+  const file = new File([blob], filename, { type: blob.type || getSaveMime() });
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       await navigator.share({ files: [file], title });
@@ -1794,11 +1829,15 @@ async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
 }
 
 shareBtn.addEventListener('click', () => {
-  shareOrSaveBlob(lastCaptureBlob, 'kani-guitar-photo.png', 'カニギターといっしょ', fallbackSave);
+  const ext = getSaveExtension();
+  fallbackSave.download = `kani-guitar-photo.${ext}`;
+  shareOrSaveBlob(lastCaptureBlob, `kani-guitar-photo.${ext}`, 'カニギターといっしょ', fallbackSave);
 });
 
 shareBackgroundBtn.addEventListener('click', () => {
-  shareOrSaveBlob(lastBackgroundBlob, 'kani-guitar-background.png', '背景写真', fallbackBackgroundSave);
+  const ext = getSaveExtension();
+  fallbackBackgroundSave.download = `kani-guitar-background.${ext}`;
+  shareOrSaveBlob(lastBackgroundBlob, `kani-guitar-background.${ext}`, '背景写真', fallbackBackgroundSave);
 });
 
 closePreview.addEventListener('click', () => {
