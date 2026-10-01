@@ -171,7 +171,7 @@ let floorShadowEnabledState = true;
 let floorYState = -0.55;
 let floorTiltState = 0;
 let floorShadowOpacityState = 0.42;
-let floorShadowSoftnessState = 0.45;
+let floorShadowSoftnessState = 0;
 let floorGuideEnabledState = true;
 let floorPointPlacementMode = false; // legacy detailed mode only
 let floorPointX = innerWidth * 0.5;
@@ -235,19 +235,31 @@ function updateVirtualFloor() {
 
   const pitch = THREE.MathUtils.degToRad(floorPitchState);
   const roll = THREE.MathUtils.degToRad(floorRollState);
+
+  // The floor's world position is its CENTER. Translation (including the
+  // height offset from the crab guitar) is resolved first; rotation is then
+  // applied around the PlaneGeometry's local origin = its own center.
+  // This keeps a detached floor from orbiting around the crab-guitar anchor.
   virtualFloor.position.set(anchorX, anchorY, anchorZ);
-  virtualFloor.rotation.set(-Math.PI / 2 + pitch, 0, roll);
+  virtualFloor.quaternion.setFromEuler(
+    new THREE.Euler(-Math.PI / 2 + pitch, 0, roll, 'XYZ')
+  );
   virtualFloor.scale.setScalar(floorScaleState);
   virtualFloor.material.opacity = floorShadowOpacityState;
   virtualFloor.visible = floorShadowEnabledState;
+  virtualFloor.updateMatrixWorld(true);
 
   floorGuide.position.copy(virtualFloor.position);
-  floorGuide.rotation.copy(virtualFloor.rotation);
+  floorGuide.quaternion.copy(virtualFloor.quaternion);
   floorGuide.scale.copy(virtualFloor.scale);
+  floorGuide.updateMatrixWorld(true);
   floorGuide.visible = floorGuideEnabledState && floorPanel.classList.contains('open') && !suppressFloorGuideForCapture;
 
-  key.shadow.radius = 1 + floorShadowSoftnessState * 18;
-  key.shadow.blurSamples = Math.round(4 + floorShadowSoftnessState * 20);
+  // 0 means effectively no added blur; increase smoothly from there.
+  key.shadow.radius = floorShadowSoftnessState * 18;
+  key.shadow.blurSamples = floorShadowSoftnessState <= 0.001
+    ? 1
+    : Math.round(2 + floorShadowSoftnessState * 22);
   key.target.position.set(anchorX, anchorY, model ? model.position.z : 0);
   key.target.updateMatrixWorld();
 }
