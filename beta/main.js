@@ -150,9 +150,8 @@ scene.add(hemi);
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
 key.position.set(2, 3, 4);
 key.castShadow = true;
-const LIVE_SHADOW_MAP_SIZE = 512;
-const CAPTURE_SHADOW_MAP_SIZE = 1024;
-key.shadow.mapSize.set(LIVE_SHADOW_MAP_SIZE, LIVE_SHADOW_MAP_SIZE);
+const SHADOW_MAP_SIZE = 1024;
+key.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 key.shadow.camera.left = -4;
 key.shadow.camera.right = 4;
 key.shadow.camera.top = 4;
@@ -777,26 +776,48 @@ const textureLoader = new THREE.TextureLoader();
 // Start texture downloads without blocking the rest of the module.
 // Previously the top-level await here meant that, after the camera opened,
 // most controls had no event listeners until every texture finished loading.
-const redTexture = textureLoader.load('../textures/KA23_Red_Albedo.png');
-const mintTexture = textureLoader.load('../textures/KA23_Mint_Albedo.png');
-const blackTexture = textureLoader.load('../textures/KA23_Black_Albedo.png');
-const darkBrownTexture = textureLoader.load('../textures/KA23_DarkBrown_Albedo.png');
-const redBrownTexture = textureLoader.load('../textures/KA23_RedBrown_Albedo.png');
-const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
-const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
-
-const colorTextures = {
-  red: redTexture,
-  mint: mintTexture,
-  black: blackTexture,
-  darkBrown: darkBrownTexture,
-  redBrown: redBrownTexture
+const colorTextureUrls = {
+  red: '../textures/KA23_Red_Albedo.png',
+  mint: '../textures/KA23_Mint_Albedo.png',
+  black: '../textures/KA23_Black_Albedo.png',
+  darkBrown: '../textures/KA23_DarkBrown_Albedo.png',
+  redBrown: '../textures/KA23_RedBrown_Albedo.png'
 };
 
-for (const tex of Object.values(colorTextures)) {
+// Only red is requested at startup. Other Albedo textures are downloaded on
+// first selection, then kept in this in-memory cache for instant reuse.
+const colorTextures = {};
+const colorTexturePromises = {};
+
+function prepareColorTexture(tex) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = true;
+  return tex;
 }
+
+function loadColorTexture(colorKey) {
+  if (colorTextures[colorKey]) return Promise.resolve(colorTextures[colorKey]);
+  if (colorTexturePromises[colorKey]) return colorTexturePromises[colorKey];
+  const url = colorTextureUrls[colorKey];
+  if (!url) return Promise.reject(new Error(`Unknown color: ${colorKey}`));
+
+  colorTexturePromises[colorKey] = new Promise((resolve, reject) => {
+    textureLoader.load(url, (tex) => {
+      colorTextures[colorKey] = prepareColorTexture(tex);
+      resolve(colorTextures[colorKey]);
+    }, undefined, reject);
+  }).finally(() => {
+    delete colorTexturePromises[colorKey];
+  });
+  return colorTexturePromises[colorKey];
+}
+
+const redTexture = prepareColorTexture(textureLoader.load(colorTextureUrls.red));
+colorTextures.red = redTexture;
+
+// Metallic/Roughness are shared by every color, so they still load once at startup.
+const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
+const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
 
@@ -890,26 +911,8 @@ function updateLiveEnvironment(now) {
 }
 
 
-function setKaniColor(colorKey) {
-  const nextTexture = colorTextures[colorKey];
-  if (!nextTexture) return;
-
-  currentColorKey = colorKey;
-
-  if (model) {
-    model.traverse((child) => {
-      if (!child.isMesh || !child.material) return;
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      for (const mat of mats) {
-        mat.map = nextTexture;
-        mat.needsUpdate = true;
-      }
-    });
-  }
-
-  colorChoices.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.color === colorKey);
-  });
+async function setKaniColor(colorKey) {
+  if (!colorTextureUrls[colorKey]) return;
 
   const selected = {
     red: '赤',
@@ -919,7 +922,36 @@ function setKaniColor(colorKey) {
     redBrown: '赤茶'
   }[colorKey];
 
-  if (selected) statusEl.textContent = `カラー：${selected}`;
+  currentColorKey = colorKey;
+  const requestKey = colorKey;
+  if (!colorTextures[colorKey]) {
+    statusEl.textContent = `カラー読み込み中：${selected}`;
+  }
+
+  try {
+    const nextTexture = await loadColorTexture(colorKey);
+    // Ignore an older request if the user tapped another color while loading.
+    if (requestKey !== currentColorKey) return;
+
+    if (model) {
+      model.traverse((child) => {
+        if (!child.isMesh || !child.material) return;
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of mats) {
+          mat.map = nextTexture;
+          mat.needsUpdate = true;
+        }
+      });
+    }
+
+    colorChoices.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.color === colorKey);
+    });
+    if (selected) statusEl.textContent = `カラー：${selected}`;
+  } catch (e) {
+    console.error('Color texture load failed:', e);
+    statusEl.textContent = 'カラーテクスチャ読込失敗';
+  }
 }
 
 const loader = new FBXLoader();
@@ -1523,19 +1555,10 @@ captureBtn.addEventListener('click', () => {
   const renderH = Math.max(outH, Math.floor(outH * supersample));
 
   const oldRatio = renderer.getPixelRatio();
-  const oldShadowMapWidth = key.shadow.mapSize.width;
-  const oldShadowMapHeight = key.shadow.mapSize.height;
 
   try {
-    // Capture only: restore the higher-quality projected shadow.
-    if (oldShadowMapWidth !== CAPTURE_SHADOW_MAP_SIZE || oldShadowMapHeight !== CAPTURE_SHADOW_MAP_SIZE) {
-      key.shadow.mapSize.set(CAPTURE_SHADOW_MAP_SIZE, CAPTURE_SHADOW_MAP_SIZE);
-      if (key.shadow.map) {
-        key.shadow.map.dispose();
-        key.shadow.map = null;
-      }
-      key.shadow.needsUpdate = true;
-    }
+    // Projected shadows use the same 1024 map in preview and capture so the
+    // saved result matches what the user adjusted on screen.
     statusEl.textContent = '高画質で画像作成中…';
 
     renderer.setPixelRatio(1);
@@ -1567,15 +1590,6 @@ captureBtn.addEventListener('click', () => {
   } finally {
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
-    // Restore the lightweight live-preview shadow map.
-    if (key.shadow.mapSize.width !== LIVE_SHADOW_MAP_SIZE || key.shadow.mapSize.height !== LIVE_SHADOW_MAP_SIZE) {
-      key.shadow.mapSize.set(LIVE_SHADOW_MAP_SIZE, LIVE_SHADOW_MAP_SIZE);
-      if (key.shadow.map) {
-        key.shadow.map.dispose();
-        key.shadow.map = null;
-      }
-      key.shadow.needsUpdate = true;
-    }
     // Restore the lightweight live preview renderer.
     renderer.setPixelRatio(oldRatio);
     renderer.setSize(cssW, cssH, false);
