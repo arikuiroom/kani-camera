@@ -213,7 +213,7 @@ const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: 
 let lastLightSample = 0;
 let autoLightingEnabled = true;
 let blendEnabledState = true;
-let blendStrengthState = 0.35;
+let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
 
 const neutralWhite = new THREE.Color(1, 1, 1);
@@ -270,15 +270,25 @@ function applyBackgroundBlend(avgR, avgG, avgB, avgLum) {
   if (!blendEnabledState) {
     blendTint.setRGB(1, 1, 1);
   } else {
-    const safeLum = Math.max(0.08, avgLum);
-    const nr = THREE.MathUtils.clamp(avgR / safeLum, 0.72, 1.28);
-    const ng = THREE.MathUtils.clamp(avgG / safeLum, 0.72, 1.28);
-    const nb = THREE.MathUtils.clamp(avgB / safeLum, 0.72, 1.28);
-    const strength = blendStrengthState * 0.55;
+    const safeLum = Math.max(0.04, avgLum);
+
+    // v1.12.1 test: make the effect intentionally obvious.
+    // Chroma is allowed to swing much further than before.
+    const nr = THREE.MathUtils.clamp(avgR / safeLum, 0.35, 1.85);
+    const ng = THREE.MathUtils.clamp(avgG / safeLum, 0.35, 1.85);
+    const nb = THREE.MathUtils.clamp(avgB / safeLum, 0.35, 1.85);
+    const strength = blendStrengthState;
+
+    // Also match exposure aggressively. A dark background should make the
+    // composited model genuinely dark instead of looking studio-lit.
+    // At strength=1, avgLum 0.10 -> about 0.18x; 0.25 -> about 0.45x.
+    const exposureMatch = THREE.MathUtils.clamp(avgLum / 0.55, 0.08, 1.35);
+    const brightness = THREE.MathUtils.lerp(1, exposureMatch, strength);
+
     blendTint.setRGB(
-      THREE.MathUtils.lerp(1, nr, strength),
-      THREE.MathUtils.lerp(1, ng, strength),
-      THREE.MathUtils.lerp(1, nb, strength)
+      THREE.MathUtils.clamp(THREE.MathUtils.lerp(1, nr, strength) * brightness, 0.02, 1.65),
+      THREE.MathUtils.clamp(THREE.MathUtils.lerp(1, ng, strength) * brightness, 0.02, 1.65),
+      THREE.MathUtils.clamp(THREE.MathUtils.lerp(1, nb, strength) * brightness, 0.02, 1.65)
     );
   }
   model.traverse((child) => {
