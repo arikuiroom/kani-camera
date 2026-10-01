@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.21 beta</title>
+<title>カニギター カメラ v1.20.22 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -644,8 +644,8 @@
 
       .mode-switch {
         left: auto;
-        right: calc(max(18px, env(safe-area-inset-right)) + 86px);
-        top: 50%;
+        right: max(18px, env(safe-area-inset-right));
+        top: 29%;
         bottom: auto;
         transform: translateY(-50%) rotate(90deg);
         transform-origin: center;
@@ -707,7 +707,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.21 beta</div>
+      <div class="menu-version">Kani Camera v1.20.22 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -943,7 +943,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.21 beta</div>
+      <div class="start-version">Kani Camera v1.20.22 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
