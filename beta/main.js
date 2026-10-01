@@ -1802,15 +1802,21 @@ async function saveLayeredPsd() {
     const pad2 = (value) => String(value).padStart(2, '0');
     const timestamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}`;
     const file = new File([blob], `Crabguitar${timestamp}.psd`, { type: blob.type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      // Send only the PSD file. Do not add title/text/url: on iOS those can
+      // become an extra text item in the share sheet.
+      await navigator.share({ files: [file] });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
   } catch (e) {
     if (e?.name !== 'AbortError') {
       console.error(e);
