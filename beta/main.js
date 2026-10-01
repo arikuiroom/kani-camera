@@ -202,9 +202,18 @@ function getCaptureViewport() {
     width = height * aspect;
   }
   const freeY = Math.max(0, screenH - height);
-  // In portrait, push the 16:9 camera frame down so the entire top control
-  // row sits on the black band. Keep a small bottom band for the shutter UI.
-  const top = portrait ? freeY + 28 : freeY * 0.5;
+  let top = portrait ? freeY + 28 : freeY * 0.5;
+
+  // Never hide part of the live 9:16 frame below the visible viewport.
+  // v1.20.10/11 intentionally pushed the full-width frame past the bottom,
+  // which made the saved 4K image contain more at the bottom than preview.
+  // Keep the preferred top band, but shrink the live frame just enough for
+  // the whole 9:16 capture area to remain visible. Saved framing then matches.
+  if (portrait && top + height > screenH) {
+    height = Math.max(1, screenH - top);
+    width = height * aspect;
+  }
+
   return {
     width,
     height,
