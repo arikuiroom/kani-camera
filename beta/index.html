@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.18.4 beta</title>
+<title>カニギター カメラ v1.18.5 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -306,24 +306,38 @@
       background: rgba(0,0,0,.08);
     }
     #startCard .start-actions {
-      display: grid;
-      gap: 10px;
-      margin-top: 14px;
+      margin-top: 20px;
     }
-    #startCard .start-actions button {
+    #startCard .start-primary-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    #startCard .start-primary-actions button {
       width: 100%;
-      font-size: 17px;
-      padding: 14px 22px;
+      aspect-ratio: 1 / 1;
+      border-radius: 22px;
+      padding: 14px;
+      font-size: 18px;
       font-weight: 700;
     }
-    #startPhoto, #forceLatestBtn {
+    #startCamera {
+      background: white;
+      color: #111;
+    }
+    #startPhoto {
       background: rgba(255,255,255,.14);
       color: white;
     }
     #forceLatestBtn {
+      width: 100%;
+      margin-top: 30px;
+      border-radius: 16px;
       font-size: 14px !important;
-      padding: 11px 18px !important;
+      padding: 12px 18px !important;
       opacity: .82;
+      background: rgba(255,255,255,.14);
+      color: white;
     }
     button[disabled] {
       opacity: .45;
@@ -535,15 +549,7 @@
       color: white;
       text-align: center;
     }
-    #startCard h1 { margin: 0 0 10px; font-size: 24px; }
-    #startCard p { margin: 0 0 18px; line-height: 1.6; opacity: .88; }
-    #startCamera {
-      font-size: 17px;
-      padding: 14px 22px;
-      background: white;
-      color: #111;
-      font-weight: 700;
-    }
+    #startCard h1 { margin: 0 0 10px; font-size: 28px; }
   </style>
 </head>
 <body>
@@ -558,7 +564,7 @@
       <div class="top-actions">
         <button id="fovBtn">パース</button>
         <button id="blendBtn" class="quick-toggle active" aria-label="タップでON/OFF、長押しで調整">なじみ</button>
-        <button id="lightBtn" class="quick-toggle active" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
+        <button id="lightBtn" class="quick-toggle" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
         <button id="shadowBtn" class="quick-toggle" aria-label="タップでON/OFF、長押しで調整">丸影</button>
         <button id="floorBtn" class="quick-toggle" aria-label="タップでON/OFF、長押しで調整">床</button>
         <button id="moreBtn" aria-label="その他のメニュー">•••</button>
@@ -569,7 +575,7 @@
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.18.4 beta</div>
+      <div class="menu-version">Kani Camera v1.18.5 beta</div>
     </div>
     
     <div id="inputPanel" aria-label="入力設定">
@@ -599,7 +605,7 @@
         <span>照明</span>
         <div class="panel-head-actions">
           <span>AUTO</span>
-          <input id="autoLight" class="switch" type="checkbox" checked />
+          <input id="autoLight" class="switch" type="checkbox" />
           <button id="closeLightBtn" class="panel-close" aria-label="閉じる">×</button>
         </div>
       </div>
@@ -787,12 +793,13 @@
 
   <div id="startOverlay">
     <div id="startCard">
-      <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.18.4 beta</div>
-      <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
+      <h1>カニギターカメラ</h1>
+      <div class="start-version">Kani Camera v1.18.5 beta</div>
       <div class="start-actions">
-        <button id="startCamera">カメラを開始</button>
-        <button id="startPhoto">写真を選ぶ</button>
+        <div class="start-primary-actions">
+          <button id="startCamera">カメラを開始</button>
+          <button id="startPhoto">写真を選ぶ</button>
+        </div>
         <button id="forceLatestBtn">最新版を再読み込み</button>
       </div>
     </div>
