@@ -1801,7 +1801,7 @@ async function saveLayeredPsd() {
     const now = new Date();
     const pad2 = (value) => String(value).padStart(2, '0');
     const timestamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}`;
-    const file = new File([blob], `Crabguitar[${timestamp}].psd`, { type: blob.type });
+    const file = new File([blob], `Crabguitar${timestamp}.psd`, { type: blob.type });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       await navigator.share({ files: [file], title: 'カニギター PSD' });
     } else {
