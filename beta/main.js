@@ -144,7 +144,7 @@ renderer.shadowMap.enabled = true;
 // appeared to do nothing.
 renderer.shadowMap.type = THREE.VSMShadowMap;
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.75);
+const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.45);
 scene.add(hemi);
 
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
