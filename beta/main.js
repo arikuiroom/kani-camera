@@ -48,6 +48,10 @@ const shadowOffsetOut = document.getElementById('shadowOffsetOut');
 const floorBtn = document.getElementById('floorBtn');
 const floorPanel = document.getElementById('floorPanel');
 const closeFloorBtn = document.getElementById('closeFloorBtn');
+const placeFloorPointBtn = document.getElementById('placeFloorPointBtn');
+const floorPointMarker = document.getElementById('floorPointMarker');
+const toggleFloorDetailsBtn = document.getElementById('toggleFloorDetailsBtn');
+const floorDetails = document.getElementById('floorDetails');
 const floorShadowEnabled = document.getElementById('floorShadowEnabled');
 const floorY = document.getElementById('floorY');
 const floorYOut = document.getElementById('floorYOut');
@@ -156,7 +160,10 @@ let floorYState = -0.55;
 let floorTiltState = 0;
 let floorShadowOpacityState = 0.42;
 let floorShadowSoftnessState = 0.45;
-let floorGuideEnabledState = true;
+let floorGuideEnabledState = false;
+let floorPointPlacementMode = false;
+let floorPointX = innerWidth * 0.5;
+let floorPointY = innerHeight * 0.70;
 let suppressFloorGuideForCapture = false;
 
 function ensureVirtualFloor() {
@@ -209,6 +216,40 @@ function updateFloorLabels() {
   floorTiltOut.textContent = `${Math.round(floorTiltState)}°`;
   floorShadowOpacityOut.textContent = floorShadowOpacityState.toFixed(2);
   floorShadowSoftnessOut.textContent = floorShadowSoftnessState.toFixed(2);
+}
+
+function setFloorPointMarker(clientX, clientY) {
+  floorPointX = clientX;
+  floorPointY = clientY;
+  floorPointMarker.style.left = `${clientX}px`;
+  floorPointMarker.style.top = `${clientY}px`;
+  floorPointMarker.classList.add('active');
+}
+
+function screenYToWorldY(clientY, worldZ = -0.25) {
+  // Intersect the camera ray with a plane parallel to the screen at the
+  // virtual floor's reference depth. This turns one screen tap into a useful
+  // floor-height value without asking the user to understand 3D coordinates.
+  const ndc = new THREE.Vector2(0, -(clientY / innerHeight) * 2 + 1);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -worldZ);
+  const hit = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(plane, hit)) return floorYState;
+  return hit.y;
+}
+
+function placeFloorAtScreenPoint(clientX, clientY) {
+  setFloorPointMarker(clientX, clientY);
+  floorYState = THREE.MathUtils.clamp(screenYToWorldY(clientY), -2.0, 1.0);
+  floorY.value = floorYState.toFixed(2);
+  updateFloorLabels();
+  updateVirtualFloor();
+  snapModelToFloor();
+  floorPointPlacementMode = false;
+  placeFloorPointBtn.textContent = '接地点を置く';
+  statusEl.textContent = '接地点に床を合わせました';
+  setTimeout(() => floorPointMarker.classList.remove('active'), 1400);
 }
 
 function snapModelToFloor() {
@@ -971,6 +1012,19 @@ closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
 });
 
+placeFloorPointBtn.addEventListener('click', () => {
+  floorPointPlacementMode = true;
+  floorPanel.classList.remove('open');
+  placeFloorPointBtn.textContent = '画面をタップ…';
+  setFloorPointMarker(floorPointX, floorPointY);
+  statusEl.textContent = '床の接地点をタップしてください';
+});
+
+toggleFloorDetailsBtn.addEventListener('click', () => {
+  floorDetails.classList.toggle('open');
+  toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
+});
+
 floorBtn.addEventListener('click', () => {
   floorPanel.classList.toggle('open');
   inputPanel.classList.remove('open');
@@ -1181,6 +1235,11 @@ const touches = new Map();
 let gestureStart = null;
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (floorPointPlacementMode) {
+    e.preventDefault();
+    placeFloorAtScreenPoint(e.clientX, e.clientY);
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   gestureStart = snapshotGesture();
