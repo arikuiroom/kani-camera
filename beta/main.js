@@ -1792,13 +1792,16 @@ async function saveLayeredPsd() {
     const data = window.agPsd.writePsd({
       width: w, height: h, canvas: lastCaptureCanvas,
       children: [
-        { name: 'Crabguitar', canvas: crab },
+        { name: 'BG', canvas: lastBackgroundCanvas },
         { name: 'Shadow', canvas: shadow },
-        { name: 'BG', canvas: lastBackgroundCanvas }
+        { name: 'Crabguitar', canvas: crab }
       ]
     }, { generateThumbnail: false });
     const blob = new Blob([data], { type: 'application/vnd.adobe.photoshop' });
-    const file = new File([blob], 'kani-guitar-layered.psd', { type: blob.type });
+    const now = new Date();
+    const pad2 = (value) => String(value).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}`;
+    const file = new File([blob], `Crabguitar[${timestamp}].psd`, { type: blob.type });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       await navigator.share({ files: [file], title: 'カニギター PSD' });
     } else {
