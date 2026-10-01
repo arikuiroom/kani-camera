@@ -53,12 +53,10 @@ const shadowDirectionOut = document.getElementById('shadowDirectionOut');
 const shadowLength = document.getElementById('shadowLength');
 const shadowLengthOut = document.getElementById('shadowLengthOut');
 const floorPointMarker = document.getElementById('floorPointMarker');
+const floorHeight = document.getElementById('floorHeight');
+const floorHeightOut = document.getElementById('floorHeightOut');
 const floorPitch = document.getElementById('floorPitch');
 const floorPitchOut = document.getElementById('floorPitchOut');
-const floorRoll = document.getElementById('floorRoll');
-const floorRollOut = document.getElementById('floorRollOut');
-const floorScale = document.getElementById('floorScale');
-const floorScaleOut = document.getElementById('floorScaleOut');
 const toggleFloorDetailsBtn = document.getElementById('toggleFloorDetailsBtn');
 const floorDetails = document.getElementById('floorDetails');
 const floorShadowEnabled = document.getElementById('floorShadowEnabled');
@@ -176,6 +174,7 @@ let floorPointY = innerHeight * 0.70;
 let shadowDirectionState = -35;
 let shadowLengthState = 0.55;
 let manualShadowShapeEnabled = false;
+let floorHeightState = 0;
 let floorPitchState = 0;
 let floorRollState = 0;
 let floorScaleState = 1;
@@ -224,7 +223,7 @@ function updateVirtualFloor() {
     const box = new THREE.Box3().setFromObject(model);
     if (!box.isEmpty()) {
       anchorX += model.position.x;
-      anchorY = box.min.y + floorOffsetY;
+      anchorY = box.min.y + floorHeightState + floorOffsetY;
       anchorZ = model.position.z - 0.25;
     }
   }
@@ -255,9 +254,8 @@ function updateFloorLabels() {
   floorShadowSoftnessOut.textContent = floorShadowSoftnessState.toFixed(2);
   shadowDirectionOut.textContent = `${Math.round(shadowDirectionState)}°`;
   shadowLengthOut.textContent = shadowLengthState.toFixed(2);
+  floorHeightOut.textContent = floorHeightState.toFixed(2);
   floorPitchOut.textContent = `${Math.round(floorPitchState)}°`;
-  floorRollOut.textContent = `${Math.round(floorRollState)}°`;
-  floorScaleOut.textContent = floorScaleState.toFixed(2);
 }
 
 function updateShadowFromDirectControls() {
@@ -1006,12 +1004,12 @@ resetBtn.addEventListener('click', () => {
   model.scale.setScalar(initialModelScale);
   floorOffsetX = 0;
   floorOffsetY = 0;
+  floorHeightState = 0;
   floorPitchState = 0;
   floorRollState = 0;
   floorScaleState = 1;
+  floorHeight.value = '0';
   floorPitch.value = '0';
-  floorRoll.value = '0';
-  floorScale.value = '1';
   updateFloorLabels();
   updateVirtualFloor();
 });
@@ -1120,18 +1118,13 @@ shadowLength.addEventListener('input', () => {
   updateShadowFromDirectControls();
 });
 
+floorHeight.addEventListener('input', () => {
+  floorHeightState = Number(floorHeight.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
 floorPitch.addEventListener('input', () => {
   floorPitchState = Number(floorPitch.value);
-  updateFloorLabels();
-  updateVirtualFloor();
-});
-floorRoll.addEventListener('input', () => {
-  floorRollState = Number(floorRoll.value);
-  updateFloorLabels();
-  updateVirtualFloor();
-});
-floorScale.addEventListener('input', () => {
-  floorScaleState = Number(floorScale.value);
   updateFloorLabels();
   updateVirtualFloor();
 });
@@ -1356,9 +1349,6 @@ let gestureStart = null;
 let floorDragPointerId = null;
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (floorPanel.classList.contains('open') && touches.size === 0) {
-    floorDragPointerId = e.pointerId;
-  }
   if (floorPointPlacementMode) {
     e.preventDefault();
     placeFloorAtScreenPoint(e.clientX, e.clientY);
@@ -1379,13 +1369,7 @@ canvas.addEventListener('pointermove', (e) => {
     const dx = e.clientX - prev.x;
     const dy = e.clientY - prev.y;
 
-    if (floorDragPointerId === e.pointerId && floorPanel.classList.contains('open')) {
-      const k = 0.0045;
-      floorOffsetX += dx * k;
-      floorOffsetY -= dy * k;
-      updateVirtualFloor();
-      statusEl.textContent = '床を微調整中';
-    } else if (interactionMode === 'move') {
+    if (interactionMode === 'move') {
       const k = 0.0045;
       model.position.x += dx * k;
       model.position.y -= dy * k;
