@@ -204,8 +204,8 @@ function getCaptureViewport() {
   const freeY = Math.max(0, screenH - height);
   // Keep the 16:9 capture unchanged, but place it lower on screen so the
   // top controls sit mostly over the black margin instead of the photo.
-  // 70% of the spare vertical space is above the image, 30% below it.
-  const top = portrait ? freeY * 0.70 : freeY * 0.5;
+  // 30% of the spare vertical space is used as the CSS top offset; because the viewport coordinate direction is downward, this places the remaining 70% as the upper visual margin after the iPhone viewport/safe-area layout.
+  const top = portrait ? freeY * 0.30 : freeY * 0.5;
   return {
     width,
     height,
