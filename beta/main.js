@@ -113,10 +113,10 @@ scene.add(fill);
 // ---- Soft ground shadow ---------------------------------------------------
 let groundShadow = null;
 let shadowEnabledState = true;
-let shadowOpacityState = 0.28;
-let shadowBlurState = 0.72;
-let shadowSizeState = 1.0;
-let shadowOffsetState = -0.22;
+let shadowOpacityState = 0.22;
+let shadowBlurState = 0.80;
+let shadowSizeState = 0.85;
+let shadowOffsetState = -0.18;
 
 function makeShadowTexture(blurValue) {
   const size = 256;
@@ -163,6 +163,14 @@ function updateGroundShadow() {
   if (!visible) return;
 
   const scaleFactor = model.scale.x / initialModelScale;
+
+  // KA-23 is much thinner from the side than from the front.
+  // Shrink the shadow width as the model turns sideways so the footprint
+  // does not stay as a large oval at every viewing angle.
+  const yaw = model.rotation.y;
+  const frontness = Math.abs(Math.cos(yaw));
+  const footprintWidth = 0.32 + 0.68 * frontness;
+
   shadow.material.opacity = shadowOpacityState;
   shadow.position.set(
     model.position.x,
@@ -170,8 +178,8 @@ function updateGroundShadow() {
     model.position.z - 0.35
   );
   shadow.scale.set(
-    initialModelScale * 1.9 * shadowSizeState * scaleFactor,
-    initialModelScale * 0.62 * shadowSizeState * scaleFactor,
+    initialModelScale * 1.35 * shadowSizeState * scaleFactor * footprintWidth,
+    initialModelScale * 0.40 * shadowSizeState * scaleFactor,
     1
   );
 }
