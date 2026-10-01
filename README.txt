@@ -144,3 +144,16 @@ ENV_MIN_BRIGHTNESS
 - HTML内に誤って入っていた文字列 "\n" を実際の改行へ修正しました。
 - 起動画面のカメラ/写真ボタンを、3Dテクスチャ読み込みより前に有効化するよう変更しました。
 - バージョン表示を Kani Camera v1.9.1 に更新しました。
+
+
+■ 正式版 / Beta版 運用
+正式版:
+https://arikuiroom.github.io/kani-camera/
+
+Beta版:
+https://arikuiroom.github.io/kani-camera/beta/
+
+- 今後の新機能は、まず beta/ のみ更新します。
+- Beta版をiPhone実機で確認し、ユーザーが承認した場合のみ正式版へ反映します。
+- beta/main.js はルートの models/ と textures/ を共有するため、大容量アセットを二重保存しません。
+- 正式版の index.html / main.js は、承認なしでは変更しません。
