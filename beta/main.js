@@ -1306,74 +1306,36 @@ function syncQuickToggleButtons() {
   floorBtn.classList.toggle('active', floorShadowEnabled.checked);
 }
 
-function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
-  const HOLD_MS = 520;
-  let holdTimer = null;
-  let longPressed = false;
-
-  button.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    longPressed = false;
-    try { button.setPointerCapture(e.pointerId); } catch {}
-    holdTimer = setTimeout(() => {
-      longPressed = true;
-      if (panel.classList.contains('open')) {
-        panel.classList.remove('open');
-      } else {
-        closeAdjustmentPanels();
-        panel.classList.add('open');
-        if (afterOpen) afterOpen();
-      }
-      if (navigator.vibrate) navigator.vibrate(15);
-    }, HOLD_MS);
-  });
-
-  const finish = (e) => {
-    if (holdTimer) clearTimeout(holdTimer);
-    holdTimer = null;
-    if (e && button.hasPointerCapture?.(e.pointerId)) {
-      try { button.releasePointerCapture(e.pointerId); } catch {}
-    }
-  };
-  button.addEventListener('pointerup', finish);
-  button.addEventListener('pointercancel', finish);
-
-  button.addEventListener('click', (e) => {
-    if (longPressed) {
-      e.preventDefault();
-      longPressed = false;
-      return;
-    }
+function installQuickToggle(button, toggleAction) {
+  button.addEventListener('click', () => {
     toggleAction();
     syncQuickToggleButtons();
   });
-
-  button.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
-installTapHoldControl(lightBtn, lightPanel, () => {
+installQuickToggle(lightBtn, () => {
   autoLight.checked = !autoLight.checked;
   updateLightControlState();
 });
 
-installTapHoldControl(blendBtn, blendPanel, () => {
+installQuickToggle(blendBtn, () => {
   blendEnabled.checked = !blendEnabled.checked;
   blendEnabledState = blendEnabled.checked;
   if (!blendEnabledState) resetBackgroundBlend();
 });
 
-installTapHoldControl(shadowBtn, shadowPanel, () => {
+installQuickToggle(shadowBtn, () => {
   shadowEnabled.checked = !shadowEnabled.checked;
   shadowEnabledState = shadowEnabled.checked;
   updateGroundShadow();
 });
 
-installTapHoldControl(floorBtn, floorPanel, () => {
+installQuickToggle(floorBtn, () => {
   floorShadowEnabled.checked = !floorShadowEnabled.checked;
   floorShadowEnabledState = floorShadowEnabled.checked;
   syncProjectedShadowRendering();
   updateVirtualFloor();
-}, updateVirtualFloor);
+});
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
