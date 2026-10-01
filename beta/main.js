@@ -169,11 +169,11 @@ scene.add(key.target);
 let floorPivot = null;
 let virtualFloor = null;
 let floorGuide = null;
-let floorShadowEnabledState = true;
+let floorShadowEnabledState = false;
 let floorYState = -0.55;
 let floorTiltState = 0;
 let floorShadowOpacityState = 0.42;
-let floorShadowSoftnessState = 0;
+let floorShadowSoftnessState = 0.25;
 let floorGuideEnabledState = true;
 let floorPointPlacementMode = false; // legacy detailed mode only
 let floorPointX = innerWidth * 0.5;
