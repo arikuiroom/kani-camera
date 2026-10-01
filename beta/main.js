@@ -113,9 +113,9 @@ scene.add(fill);
 // ---- Soft ground shadow ---------------------------------------------------
 let groundShadow = null;
 let shadowEnabledState = true;
-let shadowOpacityState = 0.22;
-let shadowBlurState = 0.80;
-let shadowSizeState = 0.85;
+let shadowOpacityState = 0.50;
+let shadowBlurState = 0.30;
+let shadowSizeState = 0.65;
 let shadowOffsetState = -0.18;
 
 function makeShadowTexture(blurValue) {
