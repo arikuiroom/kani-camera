@@ -91,7 +91,9 @@ const rotateModeBtn = document.getElementById('rotateModeBtn');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
+const shareBackgroundBtn = document.getElementById('shareBackgroundBtn');
 const fallbackSave = document.getElementById('fallbackSave');
+const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
 
 let inputMode = 'camera';
@@ -104,6 +106,8 @@ let interactionMode = 'move';
 let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
+let lastBackgroundBlob = null;
+let lastBackgroundUrl = null;
 
 const DEFAULT_FOV = 42;
 
@@ -1523,6 +1527,13 @@ function snapshotGesture() {
 }
 
 captureBtn.addEventListener('click', () => {
+  lastBackgroundBlob = null;
+  if (lastBackgroundUrl) {
+    URL.revokeObjectURL(lastBackgroundUrl);
+    lastBackgroundUrl = null;
+  }
+  fallbackBackgroundSave.style.display = 'none';
+
   const source = getActiveBackgroundSource();
   if (!source) {
     alert(inputMode === 'photo' ? '写真を選択してください。' : 'カメラの準備ができていません。');
@@ -1544,6 +1555,16 @@ captureBtn.addEventListener('click', () => {
     outW = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssW / cssH));
   }
 
+  // Freeze the exact background frame used by this capture. This gives the
+  // user a clean plate that matches the composite in timing, crop and size.
+  const backgroundOut = document.createElement('canvas');
+  backgroundOut.width = outW;
+  backgroundOut.height = outH;
+  const backgroundCtx = backgroundOut.getContext('2d');
+  backgroundCtx.imageSmoothingEnabled = true;
+  backgroundCtx.imageSmoothingQuality = 'high';
+  drawSourceCover(backgroundCtx, source, outW, outH);
+
   const out = document.createElement('canvas');
   out.width = outW;
   out.height = outH;
@@ -1551,8 +1572,8 @@ captureBtn.addEventListener('click', () => {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Background is composed directly at the final 3000px-class resolution.
-  drawSourceCover(ctx, source, outW, outH);
+  // Start the composite from the frozen clean background frame.
+  ctx.drawImage(backgroundOut, 0, 0);
 
   // Render the 3D layer at higher resolution and shrink it into the final
   // canvas. 2x in each axis = 4x the pixel count for cleaner edges.
@@ -1621,6 +1642,15 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
   }
 
+  backgroundOut.toBlob((backgroundBlob) => {
+    if (!backgroundBlob) return;
+    lastBackgroundBlob = backgroundBlob;
+    if (lastBackgroundUrl) URL.revokeObjectURL(lastBackgroundUrl);
+    lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
+    fallbackBackgroundSave.href = lastBackgroundUrl;
+    fallbackBackgroundSave.style.display = 'none';
+  }, 'image/png');
+
   out.toBlob((blob) => {
     if (!blob) {
       statusEl.textContent = '画像作成失敗';
@@ -1640,29 +1670,30 @@ captureBtn.addEventListener('click', () => {
   }, 'image/png');
 });
 
-shareBtn.addEventListener('click', async () => {
-  if (!lastCaptureBlob) return;
-
-  const file = new File([lastCaptureBlob], 'kani-guitar-photo.png', { type: 'image/png' });
-
+async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
+  if (!blob) return;
+  const file = new File([blob], filename, { type: 'image/png' });
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      await navigator.share({
-        files: [file],
-        title: 'カニギターといっしょ'
-      });
+      await navigator.share({ files: [file], title });
       return;
     }
-
-    // Web Share のファイル共有に未対応の場合だけ従来の保存リンクを表示。
-    fallbackSave.style.display = 'inline-block';
-    alert('このブラウザでは画像共有に対応していないため、「ファイルとして保存」を使ってください。');
+    fallbackLink.style.display = 'inline-block';
+    alert('このブラウザでは画像共有に対応していないため、「ファイル保存」を使ってください。');
   } catch (e) {
     if (e?.name === 'AbortError') return;
     console.error(e);
-    fallbackSave.style.display = 'inline-block';
-    alert('共有を開けませんでした。「ファイルとして保存」を使ってください。');
+    fallbackLink.style.display = 'inline-block';
+    alert('共有を開けませんでした。「ファイル保存」を使ってください。');
   }
+}
+
+shareBtn.addEventListener('click', () => {
+  shareOrSaveBlob(lastCaptureBlob, 'kani-guitar-photo.png', 'カニギターといっしょ', fallbackSave);
+});
+
+shareBackgroundBtn.addEventListener('click', () => {
+  shareOrSaveBlob(lastBackgroundBlob, 'kani-guitar-background.png', '背景写真', fallbackBackgroundSave);
 });
 
 closePreview.addEventListener('click', () => {
