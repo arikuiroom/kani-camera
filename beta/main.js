@@ -14,6 +14,8 @@ const captureBtn = document.getElementById('captureBtn');
 const resetBtn = document.getElementById('resetBtn');
 const flipBtn = document.getElementById('flipBtn');
 const hideBtn = document.getElementById('hideBtn');
+const moreBtn = document.getElementById('moreBtn');
+const morePanel = document.getElementById('morePanel');
 const inputBtn = document.getElementById('inputBtn');
 const inputPanel = document.getElementById('inputPanel');
 const closeInputBtn = document.getElementById('closeInputBtn');
@@ -1141,7 +1143,22 @@ hideBtn.addEventListener('click', () => {
   if (!model) return;
   modelVisible = !modelVisible;
   model.visible = modelVisible;
-  hideBtn.textContent = modelVisible ? '隠す' : '表示';
+  hideBtn.textContent = modelVisible ? 'カニギターを隠す' : 'カニギターを表示';
+});
+
+moreBtn.addEventListener('click', () => {
+  morePanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
+});
+
+[inputBtn, colorBtn, hideBtn].forEach((btn) => {
+  btn.addEventListener('click', () => morePanel.classList.remove('open'));
 });
 
 inputBtn.addEventListener('click', () => {
