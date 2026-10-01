@@ -62,6 +62,14 @@ let lastCaptureUrl = null;
 
 const DEFAULT_FOV = 42;
 
+// High-quality capture (Beta v1.10)
+// Final image long edge is 3000 px.
+// The 3D layer is normally rendered at 2x width/height (4x pixel count)
+// and then downsampled for smoother antialiasing.
+const CAPTURE_LONG_EDGE = 3000;
+const CAPTURE_SUPERSAMPLE = 2;
+const CAPTURE_RENDER_EDGE_CAP = 6000;
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0, 0, 5);
@@ -566,8 +574,8 @@ async function startCamera() {
       audio: false,
       video: {
         facingMode: { ideal: facingMode },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 3840 },
+        height: { ideal: 2160 }
       }
     });
     inputMode = 'camera';
@@ -775,41 +783,89 @@ captureBtn.addEventListener('click', () => {
     return;
   }
 
-  const out = document.createElement('canvas');
-
-  // Match the current screen aspect ratio to what the user sees.
   const cssW = innerWidth;
   const cssH = innerHeight;
-  const ratio = Math.min(devicePixelRatio, 2);
-  out.width = Math.round(cssW * ratio);
-  out.height = Math.round(cssH * ratio);
 
+  // Keep exactly the same aspect ratio as the live preview, but export at
+  // approximately 3000 px on the long edge.
+  let outW;
+  let outH;
+  if (cssW >= cssH) {
+    outW = CAPTURE_LONG_EDGE;
+    outH = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssH / cssW));
+  } else {
+    outH = CAPTURE_LONG_EDGE;
+    outW = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssW / cssH));
+  }
+
+  const out = document.createElement('canvas');
+  out.width = outW;
+  out.height = outH;
   const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
-  // Draw current background using "cover" crop to match what the user sees.
-  drawSourceCover(ctx, source, out.width, out.height);
+  // Background is composed directly at the final 3000px-class resolution.
+  drawSourceCover(ctx, source, outW, outH);
 
-  // Render three.js at capture resolution and composite it.
-  const oldSize = new THREE.Vector2();
-  renderer.getSize(oldSize);
+  // Render the 3D layer at higher resolution and shrink it into the final
+  // canvas. 2x in each axis = 4x the pixel count for cleaner edges.
+  const gl = renderer.getContext();
+  const maxViewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const maxRenderbuffer = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+  const deviceLimit = Math.min(
+    CAPTURE_RENDER_EDGE_CAP,
+    maxRenderbuffer || CAPTURE_RENDER_EDGE_CAP,
+    maxViewport?.[0] || CAPTURE_RENDER_EDGE_CAP,
+    maxViewport?.[1] || CAPTURE_RENDER_EDGE_CAP
+  );
+
+  const supersample = Math.max(
+    1,
+    Math.min(
+      CAPTURE_SUPERSAMPLE,
+      deviceLimit / outW,
+      deviceLimit / outH
+    )
+  );
+
+  const renderW = Math.max(outW, Math.floor(outW * supersample));
+  const renderH = Math.max(outH, Math.floor(outH * supersample));
+
   const oldRatio = renderer.getPixelRatio();
 
-  renderer.setPixelRatio(1);
-  renderer.setSize(out.width, out.height, false);
-  camera.aspect = out.width / out.height;
-  camera.updateProjectionMatrix();
-  renderer.render(scene, camera);
+  try {
+    statusEl.textContent = '高画質で画像作成中…';
 
-  ctx.drawImage(renderer.domElement, 0, 0, out.width, out.height);
+    renderer.setPixelRatio(1);
+    renderer.setSize(renderW, renderH, false);
+    camera.aspect = outW / outH;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
 
-  // Restore screen renderer.
-  renderer.setPixelRatio(oldRatio);
-  renderer.setSize(cssW, cssH, false);
-  camera.aspect = cssW / cssH;
-  camera.updateProjectionMatrix();
+    // Downsampling is the antialiasing pass.
+    ctx.drawImage(renderer.domElement, 0, 0, renderW, renderH, 0, 0, outW, outH);
+  } catch (e) {
+    console.error('High-quality capture failed:', e);
+
+    // Fallback: still export at 3000px, just without supersampling.
+    renderer.setPixelRatio(1);
+    renderer.setSize(outW, outH, false);
+    camera.aspect = outW / outH;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+    ctx.drawImage(renderer.domElement, 0, 0, outW, outH);
+  } finally {
+    // Restore the lightweight live preview renderer.
+    renderer.setPixelRatio(oldRatio);
+    renderer.setSize(cssW, cssH, false);
+    camera.aspect = cssW / cssH;
+    camera.updateProjectionMatrix();
+  }
 
   out.toBlob((blob) => {
     if (!blob) {
+      statusEl.textContent = '画像作成失敗';
       alert('画像の作成に失敗しました。');
       return;
     }
@@ -822,6 +878,7 @@ captureBtn.addEventListener('click', () => {
     fallbackSave.href = lastCaptureUrl;
     fallbackSave.style.display = 'none';
     preview.style.display = 'flex';
+    statusEl.textContent = `保存画像 ${outW}×${outH}px`;
   }, 'image/png');
 });
 
