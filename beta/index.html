@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.17 beta</title>
+<title>カニギター カメラ v1.20.18 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -605,43 +605,17 @@
     }
     #startCard h1 { margin: 0 0 10px; font-size: 28px; }
 
-    /* Landscape: keep every control anchored where portrait puts it.
-       Rotate only the readable/control surfaces to match the phone orientation. */
+    /* Landscape: rotate the complete portrait UI coordinate system.
+       Buttons and menus keep the same portrait-relative positions. */
     @media (orientation: landscape) {
-      .top-actions > button,
-      #flipBtn,
-      #resetBtn,
-      .mode-switch,
-      #morePanel,
-      #lightPanel,
-      #fovPanel,
-      #colorPanel,
-      #inputPanel,
-      #shadowPanel,
-      #blendPanel,
-      #floorPanel,
-      #savePanel {
-        transform: rotate(90deg);
-      }
-      .top-actions > button,
-      #flipBtn,
-      #resetBtn {
-        transform-origin: center;
-      }
-      .mode-switch {
-        transform: translateX(-50%) rotate(90deg);
-        transform-origin: center;
-      }
-      #morePanel,
-      #lightPanel,
-      #fovPanel,
-      #colorPanel,
-      #inputPanel,
-      #shadowPanel,
-      #blendPanel,
-      #floorPanel,
-      #savePanel {
-        transform-origin: top right;
+      #ui {
+        width: 100dvh;
+        height: 100vw;
+        inset: auto;
+        left: 0;
+        top: 0;
+        transform-origin: top left;
+        transform: translateX(100vw) rotate(90deg);
       }
     }
   </style>
@@ -658,7 +632,7 @@
       <div class="top-actions">
         <button id="fovBtn">パース</button>
         <button id="blendBtn" class="quick-toggle active" aria-label="タップで調整メニューを開閉">なじみ</button>
-        <button id="lightBtn" class="quick-toggle" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
+        <button id="lightBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">照明</button>
         <button id="shadowBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">丸影</button>
         <button id="floorBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">床</button>
         <button id="moreBtn" aria-label="その他のメニュー">•••</button>
@@ -670,7 +644,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.17 beta</div>
+      <div class="menu-version">Kani Camera v1.20.18 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -906,7 +880,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.17 beta</div>
+      <div class="start-version">Kani Camera v1.20.18 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
