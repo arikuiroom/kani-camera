@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.19.1 beta</title>
+<title>カニギター カメラ v1.19.2 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -216,7 +216,7 @@
       left: 14px;
       bottom: max(20px, env(safe-area-inset-bottom));
     }
-    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel {
+    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel, #savePanel {
       display: none;
       position: absolute;
       top: calc(max(12px, env(safe-area-inset-top)) + 52px);
@@ -231,8 +231,31 @@
       -webkit-backdrop-filter: blur(4px);
       box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
-    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open { display: block; }
+    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open, #savePanel.open { display: block; }
 
+    .format-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .format-choice {
+      width: 100%;
+      border-radius: 14px;
+      background: rgba(255,255,255,.09);
+      box-shadow: none;
+      font-size: 17px;
+    }
+    .format-choice.active {
+      background: rgba(255,255,255,.92);
+      color: #111;
+      font-weight: 700;
+    }
+    .format-note {
+      margin: 10px 2px 0;
+      font-size: 12px;
+      line-height: 1.45;
+      opacity: .72;
+    }
     .color-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -577,10 +600,23 @@
       <button id="inputBtn">入力（カメラ・写真）</button>
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
+      <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.19.1 beta</div>
+      <div class="menu-version">Kani Camera v1.19.2 beta</div>
     </div>
     
+    <div id="savePanel" aria-label="保存設定">
+      <div class="light-head">
+        <span>保存形式</span>
+        <button id="closeSaveBtn" class="panel-close" aria-label="閉じる">×</button>
+      </div>
+      <div class="format-grid">
+        <button id="formatJpegBtn" class="format-choice active">JPEG</button>
+        <button id="formatPngBtn" class="format-choice">PNG</button>
+      </div>
+      <p class="format-note">JPEGはファイルサイズを小さくできます。PNGは劣化なしで保存します。</p>
+    </div>
+
     <div id="inputPanel" aria-label="入力設定">
       <div class="light-head">
         <span>入力</span>
@@ -787,8 +823,8 @@
     <div class="preview-actions">
       <button id="shareBtn">カニギター写真を保存</button>
       <button id="shareBackgroundBtn">背景のみ保存</button>
-      <a id="fallbackSave" download="kani-guitar-photo.png">合成写真をファイル保存</a>
-      <a id="fallbackBackgroundSave" download="kani-guitar-background.png">背景写真をファイル保存</a>
+      <a id="fallbackSave" download="kani-guitar-photo.jpg">合成写真をファイル保存</a>
+      <a id="fallbackBackgroundSave" download="kani-guitar-background.jpg">背景写真をファイル保存</a>
       <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
     </div>
     <p id="saveHelp">保存解像度：—</p>
@@ -797,7 +833,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.19.1 beta</div>
+      <div class="start-version">Kani Camera v1.19.2 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
