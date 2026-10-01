@@ -53,6 +53,12 @@ const shadowDirectionOut = document.getElementById('shadowDirectionOut');
 const shadowLength = document.getElementById('shadowLength');
 const shadowLengthOut = document.getElementById('shadowLengthOut');
 const floorPointMarker = document.getElementById('floorPointMarker');
+const floorPitch = document.getElementById('floorPitch');
+const floorPitchOut = document.getElementById('floorPitchOut');
+const floorRoll = document.getElementById('floorRoll');
+const floorRollOut = document.getElementById('floorRollOut');
+const floorScale = document.getElementById('floorScale');
+const floorScaleOut = document.getElementById('floorScaleOut');
 const toggleFloorDetailsBtn = document.getElementById('toggleFloorDetailsBtn');
 const floorDetails = document.getElementById('floorDetails');
 const floorShadowEnabled = document.getElementById('floorShadowEnabled');
@@ -163,13 +169,19 @@ let floorYState = -0.55;
 let floorTiltState = 0;
 let floorShadowOpacityState = 0.42;
 let floorShadowSoftnessState = 0.45;
-let floorGuideEnabledState = false;
+let floorGuideEnabledState = true;
 let floorPointPlacementMode = false; // legacy detailed mode only
 let floorPointX = innerWidth * 0.5;
 let floorPointY = innerHeight * 0.70;
 let shadowDirectionState = -35;
 let shadowLengthState = 0.55;
-let manualShadowShapeEnabled = true;
+let manualShadowShapeEnabled = false;
+let floorPitchState = 0;
+let floorRollState = 0;
+let floorScaleState = 1;
+let floorOffsetX = 0;
+let floorOffsetY = 0;
+let modelFootOffsetY = -0.55;
 let suppressFloorGuideForCapture = false;
 
 function ensureVirtualFloor() {
@@ -202,24 +214,37 @@ function ensureVirtualFloor() {
 
 function updateVirtualFloor() {
   ensureVirtualFloor();
-  const tilt = THREE.MathUtils.degToRad(floorTiltState);
-  // A horizontal floor is an XZ plane. Tilt around X to match perspective.
-  const rotationX = -Math.PI / 2 + tilt;
-  virtualFloor.position.set(0, floorYState, -0.25);
-  virtualFloor.rotation.set(rotationX, 0, 0);
+
+  // Anchor the receiver to the model's current lowest point. The offset lets
+  // the user nudge the floor in screen X/Y without breaking model-following.
+  let anchorX = floorOffsetX;
+  let anchorY = floorYState + floorOffsetY;
+  let anchorZ = -0.25;
+  if (model) {
+    const box = new THREE.Box3().setFromObject(model);
+    if (!box.isEmpty()) {
+      anchorX += model.position.x;
+      anchorY = box.min.y + floorOffsetY;
+      anchorZ = model.position.z - 0.25;
+    }
+  }
+
+  const pitch = THREE.MathUtils.degToRad(floorPitchState);
+  const roll = THREE.MathUtils.degToRad(floorRollState);
+  virtualFloor.position.set(anchorX, anchorY, anchorZ);
+  virtualFloor.rotation.set(-Math.PI / 2 + pitch, 0, roll);
+  virtualFloor.scale.setScalar(floorScaleState);
   virtualFloor.material.opacity = floorShadowOpacityState;
   virtualFloor.visible = floorShadowEnabledState;
 
   floorGuide.position.copy(virtualFloor.position);
   floorGuide.rotation.copy(virtualFloor.rotation);
-  floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
+  floorGuide.scale.copy(virtualFloor.scale);
+  floorGuide.visible = floorGuideEnabledState && floorPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+
   key.shadow.radius = 1 + floorShadowSoftnessState * 18;
   key.shadow.blurSamples = Math.round(4 + floorShadowSoftnessState * 20);
-
-  // Keep the shadow-light target near the virtual floor/contact point.
-  // This prevents the caster from drifting outside the useful shadow frustum
-  // when easy placement moves the subject up/down the screen.
-  key.target.position.set(model ? model.position.x : 0, floorYState, model ? model.position.z : 0);
+  key.target.position.set(anchorX, anchorY, model ? model.position.z : 0);
   key.target.updateMatrixWorld();
 }
 
@@ -230,6 +255,9 @@ function updateFloorLabels() {
   floorShadowSoftnessOut.textContent = floorShadowSoftnessState.toFixed(2);
   shadowDirectionOut.textContent = `${Math.round(shadowDirectionState)}°`;
   shadowLengthOut.textContent = shadowLengthState.toFixed(2);
+  floorPitchOut.textContent = `${Math.round(floorPitchState)}°`;
+  floorRollOut.textContent = `${Math.round(floorRollState)}°`;
+  floorScaleOut.textContent = floorScaleState.toFixed(2);
 }
 
 function updateShadowFromDirectControls() {
@@ -926,7 +954,7 @@ function render(now = 0) {
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
   updateGroundShadow();
-  updateShadowFromDirectControls();
+  updateVirtualFloor();
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
@@ -976,6 +1004,16 @@ resetBtn.addEventListener('click', () => {
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
+  floorOffsetX = 0;
+  floorOffsetY = 0;
+  floorPitchState = 0;
+  floorRollState = 0;
+  floorScaleState = 1;
+  floorPitch.value = '0';
+  floorRoll.value = '0';
+  floorScale.value = '1';
+  updateFloorLabels();
+  updateVirtualFloor();
 });
 
 hideBtn.addEventListener('click', () => {
@@ -1082,6 +1120,22 @@ shadowLength.addEventListener('input', () => {
   updateShadowFromDirectControls();
 });
 
+floorPitch.addEventListener('input', () => {
+  floorPitchState = Number(floorPitch.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+floorRoll.addEventListener('input', () => {
+  floorRollState = Number(floorRoll.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+floorScale.addEventListener('input', () => {
+  floorScaleState = Number(floorScale.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
 toggleFloorDetailsBtn.addEventListener('click', () => {
   floorDetails.classList.toggle('open');
   toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
@@ -1089,6 +1143,7 @@ toggleFloorDetailsBtn.addEventListener('click', () => {
 
 floorBtn.addEventListener('click', () => {
   floorPanel.classList.toggle('open');
+  updateVirtualFloor();
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
@@ -1097,7 +1152,10 @@ floorBtn.addEventListener('click', () => {
   blendPanel.classList.remove('open');
 });
 
-closeFloorBtn.addEventListener('click', () => floorPanel.classList.remove('open'));
+closeFloorBtn.addEventListener('click', () => {
+  floorPanel.classList.remove('open');
+  updateVirtualFloor();
+});
 
 floorShadowEnabled.addEventListener('change', () => {
   floorShadowEnabledState = floorShadowEnabled.checked;
@@ -1295,8 +1353,12 @@ rotateModeBtn.addEventListener('click', () => setInteractionMode('rotate'));
 // 2 fingers = pinch scale + rotate around screen Z axis
 const touches = new Map();
 let gestureStart = null;
+let floorDragPointerId = null;
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (floorPanel.classList.contains('open') && touches.size === 0) {
+    floorDragPointerId = e.pointerId;
+  }
   if (floorPointPlacementMode) {
     e.preventDefault();
     placeFloorAtScreenPoint(e.clientX, e.clientY);
@@ -1317,7 +1379,13 @@ canvas.addEventListener('pointermove', (e) => {
     const dx = e.clientX - prev.x;
     const dy = e.clientY - prev.y;
 
-    if (interactionMode === 'move') {
+    if (floorDragPointerId === e.pointerId && floorPanel.classList.contains('open')) {
+      const k = 0.0045;
+      floorOffsetX += dx * k;
+      floorOffsetY -= dy * k;
+      updateVirtualFloor();
+      statusEl.textContent = '床を微調整中';
+    } else if (interactionMode === 'move') {
       const k = 0.0045;
       model.position.x += dx * k;
       model.position.y -= dy * k;
@@ -1342,6 +1410,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 function endPointer(e) {
+  if (floorDragPointerId === e.pointerId) floorDragPointerId = null;
   touches.delete(e.pointerId);
   gestureStart = snapshotGesture();
 }
