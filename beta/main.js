@@ -33,6 +33,18 @@ const colorBtn = document.getElementById('colorBtn');
 const colorPanel = document.getElementById('colorPanel');
 const closeColorBtn = document.getElementById('closeColorBtn');
 const colorChoices = [...document.querySelectorAll('.color-choice')];
+const shadowBtn = document.getElementById('shadowBtn');
+const shadowPanel = document.getElementById('shadowPanel');
+const closeShadowBtn = document.getElementById('closeShadowBtn');
+const shadowEnabled = document.getElementById('shadowEnabled');
+const shadowOpacity = document.getElementById('shadowOpacity');
+const shadowBlur = document.getElementById('shadowBlur');
+const shadowSize = document.getElementById('shadowSize');
+const shadowOffset = document.getElementById('shadowOffset');
+const shadowOpacityOut = document.getElementById('shadowOpacityOut');
+const shadowBlurOut = document.getElementById('shadowBlurOut');
+const shadowSizeOut = document.getElementById('shadowSizeOut');
+const shadowOffsetOut = document.getElementById('shadowOffsetOut');
 const autoLight = document.getElementById('autoLight');
 const lightPower = document.getElementById('lightPower');
 const lightPowerOut = document.getElementById('lightPowerOut');
@@ -97,6 +109,87 @@ scene.add(key);
 const fill = new THREE.DirectionalLight(0xffffff, 0.9);
 fill.position.set(-3, 1, 2);
 scene.add(fill);
+
+// ---- Soft ground shadow ---------------------------------------------------
+let groundShadow = null;
+let shadowEnabledState = true;
+let shadowOpacityState = 0.28;
+let shadowBlurState = 0.72;
+let shadowSizeState = 1.0;
+let shadowOffsetState = -0.22;
+
+function makeShadowTexture(blurValue) {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  const inner = Math.max(0.03, 0.48 - blurValue * 0.34);
+  const mid = Math.min(0.98, inner + 0.23 + blurValue * 0.18);
+  g.addColorStop(0.0, 'rgba(0,0,0,1)');
+  g.addColorStop(inner, 'rgba(0,0,0,0.98)');
+  g.addColorStop(mid, 'rgba(0,0,0,0.35)');
+  g.addColorStop(1.0, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function ensureGroundShadow() {
+  if (groundShadow) return groundShadow;
+  const mat = new THREE.SpriteMaterial({
+    map: makeShadowTexture(shadowBlurState),
+    color: 0x000000,
+    transparent: true,
+    opacity: shadowOpacityState,
+    depthWrite: false,
+    depthTest: true
+  });
+  groundShadow = new THREE.Sprite(mat);
+  groundShadow.renderOrder = 0;
+  groundShadow.position.set(0, -0.2, -0.3);
+  scene.add(groundShadow);
+  return groundShadow;
+}
+
+function updateGroundShadow() {
+  const shadow = ensureGroundShadow();
+  const visible = !!model && modelVisible && shadowEnabledState;
+  shadow.visible = visible;
+  if (!visible) return;
+
+  const scaleFactor = model.scale.x / initialModelScale;
+  shadow.material.opacity = shadowOpacityState;
+  shadow.position.set(
+    model.position.x,
+    model.position.y + shadowOffsetState * scaleFactor,
+    model.position.z - 0.35
+  );
+  shadow.scale.set(
+    initialModelScale * 1.9 * shadowSizeState * scaleFactor,
+    initialModelScale * 0.62 * shadowSizeState * scaleFactor,
+    1
+  );
+}
+
+function refreshShadowTexture() {
+  const shadow = ensureGroundShadow();
+  const next = makeShadowTexture(shadowBlurState);
+  if (shadow.material.map) shadow.material.map.dispose();
+  shadow.material.map = next;
+  shadow.material.needsUpdate = true;
+}
+
+function updateShadowLabels() {
+  shadowOpacityOut.textContent = Number(shadowOpacityState).toFixed(2);
+  shadowBlurOut.textContent = Number(shadowBlurState).toFixed(2);
+  shadowSizeOut.textContent = Number(shadowSizeState).toFixed(2);
+  shadowOffsetOut.textContent = Number(shadowOffsetState).toFixed(2);
+}
 
 // ---- Adaptive / manual lighting ------------------------------------------
 const lightSampleCanvas = document.createElement('canvas');
@@ -260,6 +353,7 @@ function closeTopPanels() {
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -531,6 +625,7 @@ loader.load(
     model.rotation.set(0.05, -0.2, -0.12);
     model.position.set(0, 0, 0);
     scene.add(model);
+    updateGroundShadow();
 
     statusEl.textContent = 'カニギター準備完了';
     setTimeout(() => { hint.style.opacity = '0'; }, 3500);
@@ -554,6 +649,7 @@ addEventListener('resize', resize);
 function render(now = 0) {
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
+  updateGroundShadow();
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
@@ -617,6 +713,7 @@ inputBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
 });
 
 closeInputBtn.addEventListener('click', () => {
@@ -636,6 +733,7 @@ lightBtn.addEventListener('click', () => {
   inputPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
 });
 
 closeLightBtn.addEventListener('click', () => {
@@ -647,6 +745,7 @@ fovBtn.addEventListener('click', () => {
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
 });
 
 closeFovBtn.addEventListener('click', () => {
@@ -658,6 +757,7 @@ colorBtn.addEventListener('click', () => {
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
 });
 
 closeColorBtn.addEventListener('click', () => {
@@ -668,6 +768,48 @@ colorChoices.forEach((btn) => {
   btn.addEventListener('click', () => {
     setKaniColor(btn.dataset.color);
   });
+});
+
+shadowBtn.addEventListener('click', () => {
+  shadowPanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+});
+
+closeShadowBtn.addEventListener('click', () => {
+  shadowPanel.classList.remove('open');
+});
+
+shadowEnabled.addEventListener('change', () => {
+  shadowEnabledState = shadowEnabled.checked;
+  updateGroundShadow();
+});
+
+shadowOpacity.addEventListener('input', () => {
+  shadowOpacityState = Number(shadowOpacity.value);
+  updateShadowLabels();
+  updateGroundShadow();
+});
+
+shadowBlur.addEventListener('input', () => {
+  shadowBlurState = Number(shadowBlur.value);
+  updateShadowLabels();
+  refreshShadowTexture();
+  updateGroundShadow();
+});
+
+shadowSize.addEventListener('input', () => {
+  shadowSizeState = Number(shadowSize.value);
+  updateShadowLabels();
+  updateGroundShadow();
+});
+
+shadowOffset.addEventListener('input', () => {
+  shadowOffsetState = Number(shadowOffset.value);
+  updateShadowLabels();
+  updateGroundShadow();
 });
 
 fovRange.addEventListener('input', () => {
@@ -700,6 +842,9 @@ lightElevation.addEventListener('input', () => {
 updateLightLabels();
 updateLightControlState();
 updateInputUI();
+updateShadowLabels();
+ensureGroundShadow();
+updateGroundShadow();
 
 function setInteractionMode(mode) {
   interactionMode = mode;
