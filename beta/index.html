@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.18.3 beta</title>
+<title>カニギター カメラ v1.18.4 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -76,7 +76,7 @@
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 2px 12px rgba(0,0,0,.2);
     }
-    .status { pointer-events: none; }
+    .status { display: none !important; pointer-events: none; }
     .start-version {
       margin-top: -4px;
       margin-bottom: 12px;
@@ -176,8 +176,8 @@
       background: rgba(12,12,12,.24);
       color: white;
       pointer-events: auto;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
     #morePanel.open { display: grid; gap: 6px; }
@@ -187,6 +187,13 @@
       box-shadow: none;
       background: rgba(255,255,255,.08);
       font-size: 18px;
+    }
+    .menu-version {
+      padding: 7px 10px 2px;
+      text-align: center;
+      font-size: 13px;
+      color: rgba(255,255,255,.72);
+      pointer-events: none;
     }
     .panel-head-actions { display:flex; align-items:center; gap:8px; }
     .panel-close { padding: 7px 11px; font-size: 20px; line-height: 1; }
@@ -217,8 +224,8 @@
       background: rgba(12,12,12,.24);
       color: white;
       pointer-events: auto;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
     #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open { display: block; }
@@ -562,6 +569,7 @@
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
+      <div class="menu-version">Kani Camera v1.18.4 beta</div>
     </div>
     
     <div id="inputPanel" aria-label="入力設定">
@@ -763,7 +771,6 @@
     </div>
     <button id="flipBtn">カメラ切替</button>
     <button id="resetBtn" aria-label="位置を戻す">↶<br>リセット</button>
-    <div class="version-badge">Kani Camera v1.18.3 beta</div>
   </div>
 
   <div id="preview">
@@ -781,7 +788,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.18.3 beta</div>
+      <div class="start-version">Kani Camera v1.18.4 beta</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
