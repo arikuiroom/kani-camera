@@ -105,6 +105,7 @@ const formatJpegBtn = document.getElementById('formatJpegBtn');
 const formatPngBtn = document.getElementById('formatPngBtn');
 const previewFormatJpegBtn = document.getElementById('previewFormatJpegBtn');
 const previewFormatPngBtn = document.getElementById('previewFormatPngBtn');
+const savePsdBtn = document.getElementById('savePsdBtn');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -1727,6 +1728,95 @@ previewFormatPngBtn.addEventListener('click', async () => {
   await rebuildSavedBlobsForFormat();
 });
 syncSaveFormatUI();
+
+
+function renderPsdLayer(width, height, shadowOnly) {
+  const c = document.createElement('canvas');
+  c.width = width; c.height = height;
+  const oldRatio = renderer.getPixelRatio();
+  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize);
+  const oldAspect = camera.aspect;
+  const floorVisible = floorPivot ? floorPivot.visible : false;
+  const groundVisible = groundShadow ? groundShadow.visible : false;
+  const materialStates = [];
+
+  renderer.setPixelRatio(1);
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  suppressFloorGuideForCapture = true;
+  updateVirtualFloor();
+
+  if (shadowOnly) {
+    if (floorPivot) floorPivot.visible = floorShadowEnabledState;
+    if (groundShadow) groundShadow.visible = shadowEnabledState;
+    if (model) model.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { materialStates.push([m, m.colorWrite]); m.colorWrite = false; });
+    });
+    renderer.shadowMap.needsUpdate = true;
+  } else {
+    if (floorPivot) floorPivot.visible = false;
+    if (groundShadow) groundShadow.visible = false;
+  }
+
+  renderer.render(scene, camera);
+  c.getContext('2d').drawImage(renderer.domElement, 0, 0, width, height);
+
+  materialStates.forEach(([m, v]) => { m.colorWrite = v; });
+  if (floorPivot) floorPivot.visible = floorVisible;
+  if (groundShadow) groundShadow.visible = groundVisible;
+  suppressFloorGuideForCapture = false;
+  updateVirtualFloor();
+  renderer.setPixelRatio(oldRatio);
+  renderer.setSize(oldSize.x, oldSize.y, false);
+  camera.aspect = oldAspect;
+  camera.updateProjectionMatrix();
+  return c;
+}
+
+async function saveLayeredPsd() {
+  if (!lastCaptureCanvas || !lastBackgroundCanvas) return;
+  if (!window.agPsd?.writePsd) {
+    alert('PSD書き出し機能を読み込めませんでした。最新版を再読み込みしてください。');
+    return;
+  }
+  savePsdBtn.disabled = true;
+  savePsdBtn.textContent = 'PSD作成中…';
+  let crab = null, shadow = null;
+  try {
+    const w = lastCaptureCanvas.width, h = lastCaptureCanvas.height;
+    crab = renderPsdLayer(w, h, false);
+    shadow = renderPsdLayer(w, h, true);
+    const data = window.agPsd.writePsd({
+      width: w, height: h, canvas: lastCaptureCanvas,
+      children: [
+        { name: 'Crabguitar', canvas: crab },
+        { name: 'Shadow', canvas: shadow },
+        { name: 'BG', canvas: lastBackgroundCanvas }
+      ]
+    }, { generateThumbnail: false });
+    const blob = new Blob([data], { type: 'application/vnd.adobe.photoshop' });
+    const file = new File([blob], 'kani-guitar-layered.psd', { type: blob.type });
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      await navigator.share({ files: [file], title: 'カニギター PSD' });
+    } else {
+      alert('この端末ではPSDの共有保存に対応していません。');
+    }
+  } catch (e) {
+    if (e?.name !== 'AbortError') {
+      console.error(e);
+      alert('PSDの作成に失敗しました。4K PSDはメモリを多く使うため、Safariを再起動すると改善する場合があります。');
+    }
+  } finally {
+    if (crab) { crab.width = 1; crab.height = 1; }
+    if (shadow) { shadow.width = 1; shadow.height = 1; }
+    savePsdBtn.disabled = false;
+    savePsdBtn.textContent = 'PSD（レイヤー付き）';
+  }
+}
+savePsdBtn.addEventListener('click', saveLayeredPsd);
 
 captureBtn.addEventListener('click', () => {
   lastBackgroundBlob = null;
