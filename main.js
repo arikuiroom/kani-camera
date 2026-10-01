@@ -45,6 +45,33 @@ const shadowOpacityOut = document.getElementById('shadowOpacityOut');
 const shadowBlurOut = document.getElementById('shadowBlurOut');
 const shadowSizeOut = document.getElementById('shadowSizeOut');
 const shadowOffsetOut = document.getElementById('shadowOffsetOut');
+const floorBtn = document.getElementById('floorBtn');
+const floorPanel = document.getElementById('floorPanel');
+const closeFloorBtn = document.getElementById('closeFloorBtn');
+const shadowDirection = document.getElementById('shadowDirection');
+const shadowDirectionOut = document.getElementById('shadowDirectionOut');
+const shadowLength = document.getElementById('shadowLength');
+const shadowLengthOut = document.getElementById('shadowLengthOut');
+const floorPointMarker = document.getElementById('floorPointMarker');
+const floorPivotMarker = document.getElementById('floorPivotMarker');
+const floorHeight = document.getElementById('floorHeight');
+const floorHeightOut = document.getElementById('floorHeightOut');
+const floorPitch = document.getElementById('floorPitch');
+const floorPitchOut = document.getElementById('floorPitchOut');
+const toggleFloorDetailsBtn = document.getElementById('toggleFloorDetailsBtn');
+const floorDetails = document.getElementById('floorDetails');
+const floorShadowEnabled = document.getElementById('floorShadowEnabled');
+const floorY = document.getElementById('floorY');
+const floorYOut = document.getElementById('floorYOut');
+const floorTilt = document.getElementById('floorTilt');
+const floorTiltOut = document.getElementById('floorTiltOut');
+const useDeviceTiltBtn = document.getElementById('useDeviceTiltBtn');
+const floorShadowOpacity = document.getElementById('floorShadowOpacity');
+const floorShadowOpacityOut = document.getElementById('floorShadowOpacityOut');
+const floorShadowSoftness = document.getElementById('floorShadowSoftness');
+const floorShadowSoftnessOut = document.getElementById('floorShadowSoftnessOut');
+const floorGuideEnabled = document.getElementById('floorGuideEnabled');
+const snapToFloorBtn = document.getElementById('snapToFloorBtn');
 const blendBtn = document.getElementById('blendBtn');
 const blendPanel = document.getElementById('blendPanel');
 const closeBlendBtn = document.getElementById('closeBlendBtn');
@@ -64,7 +91,9 @@ const rotateModeBtn = document.getElementById('rotateModeBtn');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
+const shareBackgroundBtn = document.getElementById('shareBackgroundBtn');
 const fallbackSave = document.getElementById('fallbackSave');
+const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
 
 let inputMode = 'camera';
@@ -77,6 +106,8 @@ let interactionMode = 'move';
 let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
+let lastBackgroundBlob = null;
+let lastBackgroundUrl = null;
 
 const DEFAULT_FOV = 42;
 
@@ -98,19 +129,283 @@ const renderer = new THREE.WebGLRenderer({
   antialias: true,
   preserveDrawingBuffer: true
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Power-saving live preview: cap DPR. High-resolution capture temporarily
+// renders at its own output resolution, so saved-image quality is unaffected.
+const LIVE_PIXEL_RATIO_CAP = 1.5;
+renderer.setPixelRatio(Math.min(devicePixelRatio, LIVE_PIXEL_RATIO_CAP));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.75);
+// v1.13: real-time projected shadow onto a transparent virtual floor.
+// PCF soft shadows are light enough for live iPhone preview and are also
+// included in the high-resolution capture pass.
+renderer.shadowMap.enabled = true;
+// VSM gives us a genuinely adjustable blur radius. PCFSoftShadowMap ignores
+// the radius control on WebGLRenderer, which is why v1.13.0's blur slider
+// appeared to do nothing.
+renderer.shadowMap.type = THREE.VSMShadowMap;
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.45);
 scene.add(hemi);
 
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
 key.position.set(2, 3, 4);
+key.castShadow = true;
+const SHADOW_MAP_SIZE = 1024;
+key.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+key.shadow.camera.left = -4;
+key.shadow.camera.right = 4;
+key.shadow.camera.top = 4;
+key.shadow.camera.bottom = -4;
+key.shadow.camera.near = 0.1;
+key.shadow.camera.far = 20;
+key.shadow.bias = -0.0008;
+key.shadow.normalBias = 0.02;
+key.shadow.radius = 3;
 scene.add(key);
+scene.add(key.target);
+
+// ---- Virtual floor + projected shadow ------------------------------------
+let floorPivot = null;
+let virtualFloor = null;
+let floorGuide = null;
+let floorShadowEnabledState = false;
+let floorYState = -0.55;
+let floorTiltState = 0;
+let floorShadowOpacityState = 0.42;
+let floorShadowSoftnessState = 0.25;
+let floorGuideEnabledState = true;
+let floorPointPlacementMode = false; // legacy detailed mode only
+let floorPointX = innerWidth * 0.5;
+let floorPointY = innerHeight * 0.70;
+let shadowDirectionState = -35;
+let shadowLengthState = 0.55;
+let manualShadowShapeEnabled = false;
+let floorHeightState = 0;
+let floorPitchState = 0;
+let floorRollState = 0;
+let floorScaleState = 1;
+let floorOffsetX = 0;
+let floorOffsetY = 0;
+let modelFootOffsetY = -0.55;
+let suppressFloorGuideForCapture = false;
+
+function syncProjectedShadowRendering() {
+  // The expensive shadow-map pass is only useful when the projected floor
+  // shadow is visible. Keeping the feature OFF now skips that GPU pass too.
+  renderer.shadowMap.autoUpdate = floorShadowEnabledState;
+  if (floorShadowEnabledState) renderer.shadowMap.needsUpdate = true;
+}
+syncProjectedShadowRendering();
+
+function ensureVirtualFloor() {
+  if (floorPivot) return;
+
+  // Dedicated pivot: this object is the ONLY world-space anchor for the floor.
+  // The receiver and guide live at local (0,0,0), so their rotation can never
+  // orbit around the camera or another world-space point.
+  floorPivot = new THREE.Group();
+  floorPivot.name = 'VirtualFloorPivot';
+  scene.add(floorPivot);
+
+  const geometry = new THREE.PlaneGeometry(12, 12);
+  const shadowMaterial = new THREE.ShadowMaterial({
+    color: 0x000000,
+    opacity: floorShadowOpacityState,
+    transparent: true,
+    depthWrite: false
+  });
+  virtualFloor = new THREE.Mesh(geometry, shadowMaterial);
+  virtualFloor.receiveShadow = true;
+  virtualFloor.renderOrder = -50;
+  virtualFloor.position.set(0, 0, 0);
+  floorPivot.add(virtualFloor);
+
+  const guideGeometry = new THREE.PlaneGeometry(6, 6, 6, 6);
+  const guideMaterial = new THREE.MeshBasicMaterial({
+    color: 0x66ccff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.20,
+    depthWrite: false
+  });
+  floorGuide = new THREE.Mesh(guideGeometry, guideMaterial);
+  floorGuide.renderOrder = -60;
+  floorGuide.position.set(0, 0, 0);
+  floorPivot.add(floorGuide);
+  updateVirtualFloor();
+}
+
+function updateFloorPivotMarker() {
+  if (!floorPivot || !floorPanel.classList.contains('open') || suppressFloorGuideForCapture) {
+    floorPivotMarker.classList.remove('visible');
+    return;
+  }
+  const p = floorPivot.position.clone().project(camera);
+  const x = (p.x * 0.5 + 0.5) * innerWidth;
+  const y = (-p.y * 0.5 + 0.5) * innerHeight;
+  floorPivotMarker.style.left = `${x}px`;
+  floorPivotMarker.style.top = `${y}px`;
+  floorPivotMarker.classList.add('visible');
+}
+
+function updateVirtualFloor() {
+  const floorUIActive = floorPanel.classList.contains('open');
+  if (!floorShadowEnabledState && !floorUIActive) {
+    if (virtualFloor) virtualFloor.visible = false;
+    if (floorGuide) floorGuide.visible = false;
+    floorPivotMarker.classList.remove('visible');
+    return;
+  }
+
+  ensureVirtualFloor();
+
+  // Pivot follows the crab-guitar foot point. Height is applied to the pivot
+  // itself. Rotation happens only on the pivot; the floor remains centered at
+  // local origin. This makes the yellow + the true rotation center identical.
+  let pivotX = floorOffsetX;
+  let pivotY = floorYState + floorOffsetY + floorHeightState;
+  let pivotZ = 0;
+  if (model) {
+    const box = new THREE.Box3().setFromObject(model);
+    if (!box.isEmpty()) {
+      pivotX += model.position.x;
+      pivotY = box.min.y + floorHeightState + floorOffsetY;
+      // Use the model's actual depth as the pivot. v1.16.1 used z - 0.25,
+      // which visually shifted the apparent rotation center toward the camera.
+      pivotZ = model.position.z;
+    }
+  }
+
+  floorPivot.position.set(pivotX, pivotY, pivotZ);
+  floorPivot.rotation.set(
+    THREE.MathUtils.degToRad(floorPitchState),
+    0,
+    THREE.MathUtils.degToRad(floorRollState),
+    'XYZ'
+  );
+  floorPivot.scale.setScalar(floorScaleState);
+  floorPivot.updateMatrixWorld(true);
+
+  // PlaneGeometry starts in XY, so lay each child flat locally. The pivot then
+  // supplies only the user's pitch/roll around the exact foot-point origin.
+  virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
+  virtualFloor.material.opacity = floorShadowOpacityState;
+  virtualFloor.visible = floorShadowEnabledState;
+  virtualFloor.updateMatrixWorld(true);
+
+  floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+  floorGuide.visible = floorGuideEnabledState && floorPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+  floorGuide.updateMatrixWorld(true);
+
+  key.shadow.radius = floorShadowSoftnessState * 18;
+  key.shadow.blurSamples = floorShadowSoftnessState <= 0.001
+    ? 1
+    : Math.round(2 + floorShadowSoftnessState * 22);
+  key.target.position.copy(floorPivot.position);
+  key.target.updateMatrixWorld();
+
+  updateFloorPivotMarker();
+}
+
+function updateFloorLabels() {
+  floorYOut.textContent = floorYState.toFixed(2);
+  floorTiltOut.textContent = `${Math.round(floorTiltState)}°`;
+  floorShadowOpacityOut.textContent = floorShadowOpacityState.toFixed(2);
+  floorShadowSoftnessOut.textContent = floorShadowSoftnessState.toFixed(2);
+  shadowDirectionOut.textContent = `${Math.round(shadowDirectionState)}°`;
+  shadowLengthOut.textContent = shadowLengthState.toFixed(2);
+  floorHeightOut.textContent = floorHeightState.toFixed(2);
+  floorPitchOut.textContent = `${Math.round(floorPitchState)}°`;
+}
+
+function updateShadowFromDirectControls() {
+  if (!manualShadowShapeEnabled || !model) return;
+
+  // Keep the receiver plane stable. The user edits the visible result instead:
+  // direction = light azimuth opposite the desired shadow,
+  // length = light elevation (lower light => longer projected shadow).
+  const dir = THREE.MathUtils.degToRad(shadowDirectionState + 180);
+  const elevationDeg = THREE.MathUtils.lerp(72, 12, THREE.MathUtils.clamp((shadowLengthState - 0.15) / 1.65, 0, 1));
+  const el = THREE.MathUtils.degToRad(elevationDeg);
+  const radius = 5;
+  const cosEl = Math.cos(el);
+  const target = key.target.position;
+  key.position.set(
+    target.x + Math.sin(dir) * cosEl * radius,
+    target.y + Math.sin(el) * radius,
+    target.z + Math.cos(dir) * cosEl * radius
+  );
+}
+
+function setFloorPointMarker(clientX, clientY) {
+  floorPointX = clientX;
+  floorPointY = clientY;
+  floorPointMarker.style.left = `${clientX}px`;
+  floorPointMarker.style.top = `${clientY}px`;
+  floorPointMarker.classList.add('active');
+}
+
+function screenYToWorldY(clientY, worldZ = -0.25) {
+  // Intersect the camera ray with a plane parallel to the screen at the
+  // virtual floor's reference depth. This turns one screen tap into a useful
+  // floor-height value without asking the user to understand 3D coordinates.
+  const ndc = new THREE.Vector2(0, -(clientY / innerHeight) * 2 + 1);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -worldZ);
+  const hit = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(plane, hit)) return floorYState;
+  return hit.y;
+}
+
+function placeFloorAtScreenPoint(clientX, clientY) {
+  setFloorPointMarker(clientX, clientY);
+
+  // Keep the floor/model relationship that already produces a valid projected
+  // shadow, and move that contacted pair vertically to the tapped screen point.
+  // v1.13.2 instead recomputed an absolute floor Y from a screen-parallel plane;
+  // that could move the receiver away from the caster/light and make the real
+  // shadow disappear.
+  if (model) {
+    const box = new THREE.Box3().setFromObject(model);
+    if (!box.isEmpty()) {
+      const currentContactY = box.min.y;
+      const targetY = THREE.MathUtils.clamp(screenYToWorldY(clientY), -2.0, 1.0);
+      const deltaY = targetY - currentContactY;
+      model.position.y += deltaY;
+      floorYState += deltaY;
+      floorYState = THREE.MathUtils.clamp(floorYState, -2.0, 1.0);
+      floorY.value = floorYState.toFixed(2);
+    }
+  }
+
+  // Easy mode intentionally uses the stable horizontal receiver. Perspective
+  // tilt remains available only in the detailed controls.
+  floorTiltState = 0;
+  floorTilt.value = '0';
+  floorShadowEnabledState = true;
+  floorShadowEnabled.checked = true;
+  updateFloorLabels();
+  updateVirtualFloor();
+
+  floorPointPlacementMode = false;
+  statusEl.textContent = '接地点に床と影を合わせました';
+  setTimeout(() => floorPointMarker.classList.remove('active'), 1400);
+}
+
+function snapModelToFloor() {
+  if (!model) return;
+  // The FBX is centered on import. Use its current world bounding box so the
+  // lowest visible point meets the chosen floor height without changing pose.
+  const box = new THREE.Box3().setFromObject(model);
+  if (box.isEmpty()) return;
+  model.position.y += floorYState - box.min.y;
+  statusEl.textContent = 'カニギターを床に合わせました';
+}
 
 const fill = new THREE.DirectionalLight(0xffffff, 0.9);
 fill.position.set(-3, 1, 2);
@@ -118,7 +413,7 @@ scene.add(fill);
 
 // ---- Soft ground shadow ---------------------------------------------------
 let groundShadow = null;
-let shadowEnabledState = true;
+let shadowEnabledState = false;
 let shadowOpacityState = 0.50;
 let shadowBlurState = 0.30;
 let shadowSizeState = 0.65;
@@ -166,10 +461,13 @@ function ensureGroundShadow() {
 }
 
 function updateGroundShadow() {
-  const shadow = ensureGroundShadow();
   const visible = !!model && modelVisible && shadowEnabledState;
-  shadow.visible = visible;
-  if (!visible) return;
+  if (!visible) {
+    if (groundShadow) groundShadow.visible = false;
+    return;
+  }
+  const shadow = ensureGroundShadow();
+  shadow.visible = true;
 
   const scaleFactor = model.scale.x / initialModelScale;
 
@@ -315,7 +613,7 @@ function updateAdaptiveLighting(now) {
   const source = getActiveBackgroundSource();
   if (!source) return;
   if (!autoLightingEnabled && !blendEnabledState) return;
-  if (now - lastLightSample < 400) return;
+  if (now - lastLightSample < 600) return;
   lastLightSample = now;
 
   const w = lightSampleCanvas.width;
@@ -426,6 +724,7 @@ function closeTopPanels() {
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -451,7 +750,7 @@ async function activateCameraMode() {
   video.style.display = 'block';
   updateInputUI();
   closeTopPanels();
-  statusEl.textContent = 'カメラ起動中';
+  statusEl.textContent = 'カメラ起動中・省電力30fps';
   await startCamera();
 }
 
@@ -500,26 +799,48 @@ const textureLoader = new THREE.TextureLoader();
 // Start texture downloads without blocking the rest of the module.
 // Previously the top-level await here meant that, after the camera opened,
 // most controls had no event listeners until every texture finished loading.
-const redTexture = textureLoader.load('./textures/KA23_Red_Albedo.png');
-const mintTexture = textureLoader.load('./textures/KA23_Mint_Albedo.png');
-const blackTexture = textureLoader.load('./textures/KA23_Black_Albedo.png');
-const darkBrownTexture = textureLoader.load('./textures/KA23_DarkBrown_Albedo.png');
-const redBrownTexture = textureLoader.load('./textures/KA23_RedBrown_Albedo.png');
-const metallicTexture = textureLoader.load('./textures/KA23_Solid_Metallic.png');
-const roughnessTexture = textureLoader.load('./textures/KA23_Solid_Roughness.png');
-
-const colorTextures = {
-  red: redTexture,
-  mint: mintTexture,
-  black: blackTexture,
-  darkBrown: darkBrownTexture,
-  redBrown: redBrownTexture
+const colorTextureUrls = {
+  red: './textures/KA23_Red_Albedo.png',
+  mint: './textures/KA23_Mint_Albedo.png',
+  black: './textures/KA23_Black_Albedo.png',
+  darkBrown: './textures/KA23_DarkBrown_Albedo.png',
+  redBrown: './textures/KA23_RedBrown_Albedo.png'
 };
 
-for (const tex of Object.values(colorTextures)) {
+// Only red is requested at startup. Other Albedo textures are downloaded on
+// first selection, then kept in this in-memory cache for instant reuse.
+const colorTextures = {};
+const colorTexturePromises = {};
+
+function prepareColorTexture(tex) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = true;
+  return tex;
 }
+
+function loadColorTexture(colorKey) {
+  if (colorTextures[colorKey]) return Promise.resolve(colorTextures[colorKey]);
+  if (colorTexturePromises[colorKey]) return colorTexturePromises[colorKey];
+  const url = colorTextureUrls[colorKey];
+  if (!url) return Promise.reject(new Error(`Unknown color: ${colorKey}`));
+
+  colorTexturePromises[colorKey] = new Promise((resolve, reject) => {
+    textureLoader.load(url, (tex) => {
+      colorTextures[colorKey] = prepareColorTexture(tex);
+      resolve(colorTextures[colorKey]);
+    }, undefined, reject);
+  }).finally(() => {
+    delete colorTexturePromises[colorKey];
+  });
+  return colorTexturePromises[colorKey];
+}
+
+const redTexture = prepareColorTexture(textureLoader.load(colorTextureUrls.red));
+colorTextures.red = redTexture;
+
+// Metallic/Roughness are shared by every color, so they still load once at startup.
+const metallicTexture = textureLoader.load('./textures/KA23_Solid_Metallic.png');
+const roughnessTexture = textureLoader.load('./textures/KA23_Solid_Roughness.png');
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
 
@@ -556,7 +877,7 @@ function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 250) return; // about 4 updates/sec
+  if (now - lastEnvUpdate < 1000) return; // power-saving: about 1 update/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
@@ -613,26 +934,8 @@ function updateLiveEnvironment(now) {
 }
 
 
-function setKaniColor(colorKey) {
-  const nextTexture = colorTextures[colorKey];
-  if (!nextTexture) return;
-
-  currentColorKey = colorKey;
-
-  if (model) {
-    model.traverse((child) => {
-      if (!child.isMesh || !child.material) return;
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      for (const mat of mats) {
-        mat.map = nextTexture;
-        mat.needsUpdate = true;
-      }
-    });
-  }
-
-  colorChoices.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.color === colorKey);
-  });
+async function setKaniColor(colorKey) {
+  if (!colorTextureUrls[colorKey]) return;
 
   const selected = {
     red: '赤',
@@ -642,7 +945,36 @@ function setKaniColor(colorKey) {
     redBrown: '赤茶'
   }[colorKey];
 
-  if (selected) statusEl.textContent = `カラー：${selected}`;
+  currentColorKey = colorKey;
+  const requestKey = colorKey;
+  if (!colorTextures[colorKey]) {
+    statusEl.textContent = `カラー読み込み中：${selected}`;
+  }
+
+  try {
+    const nextTexture = await loadColorTexture(colorKey);
+    // Ignore an older request if the user tapped another color while loading.
+    if (requestKey !== currentColorKey) return;
+
+    if (model) {
+      model.traverse((child) => {
+        if (!child.isMesh || !child.material) return;
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of mats) {
+          mat.map = nextTexture;
+          mat.needsUpdate = true;
+        }
+      });
+    }
+
+    colorChoices.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.color === colorKey);
+    });
+    if (selected) statusEl.textContent = `カラー：${selected}`;
+  } catch (e) {
+    console.error('Color texture load failed:', e);
+    statusEl.textContent = 'カラーテクスチャ読込失敗';
+  }
 }
 
 const loader = new FBXLoader();
@@ -653,7 +985,9 @@ loader.load(
 
     model.traverse((child) => {
       if (!child.isMesh) return;
-      child.castShadow = false;
+      // v1.13: cast onto the virtual floor, but do not receive shadows yet.
+      // This deliberately keeps self-shadowing postponed.
+      child.castShadow = true;
       child.receiveShadow = false;
 
       // Use one predictable PBR material so FBX material colors do not tint
@@ -692,6 +1026,8 @@ loader.load(
     model.position.set(0, 0, 0);
     scene.add(model);
     updateGroundShadow();
+    updateVirtualFloor();
+    updateShadowFromDirectControls();
 
     statusEl.textContent = 'カニギター準備完了';
     setTimeout(() => { hint.style.opacity = '0'; }, 3500);
@@ -712,14 +1048,35 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+const IDLE_FRAME_INTERVAL = 1000 / 5;
+const INTERACTION_FRAME_INTERVAL = 1000 / 30;
+const INTERACTION_TAIL_MS = 500;
+let lastLiveFrame = -IDLE_FRAME_INTERVAL;
+let interactionBoostUntil = 0;
+
+function boostLiveFps(now = performance.now()) {
+  interactionBoostUntil = Math.max(interactionBoostUntil, now + INTERACTION_TAIL_MS);
+}
+
 function render(now = 0) {
+  requestAnimationFrame(render);
+  const frameInterval = (touches.size > 0 || now < interactionBoostUntil)
+    ? INTERACTION_FRAME_INTERVAL
+    : IDLE_FRAME_INTERVAL;
+  if (now - lastLiveFrame < frameInterval) return;
+  lastLiveFrame = now - ((now - lastLiveFrame) % frameInterval);
+
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
-  updateGroundShadow();
+
+  // Shadow systems are normally off. Avoid their per-frame transforms and
+  // model bounds traversal unless the user is actually using them.
+  if (shadowEnabledState || groundShadow) updateGroundShadow();
+  if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
+
   renderer.render(scene, camera);
-  requestAnimationFrame(render);
 }
-render();
+requestAnimationFrame(render);
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -736,8 +1093,11 @@ async function startCamera() {
       audio: false,
       video: {
         facingMode: { ideal: facingMode },
-        width: { ideal: 3840 },
-        height: { ideal: 2160 }
+        // 1080p is ample for the live camera background and substantially
+        // cheaper than requesting 4K continuously on iPhone.
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 }
       }
     });
     inputMode = 'camera';
@@ -765,6 +1125,16 @@ resetBtn.addEventListener('click', () => {
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
+  floorOffsetX = 0;
+  floorOffsetY = 0;
+  floorHeightState = 0;
+  floorPitchState = 0;
+  floorRollState = 0;
+  floorScaleState = 1;
+  floorHeight.value = '0';
+  floorPitch.value = '0';
+  updateFloorLabels();
+  updateVirtualFloor();
 });
 
 hideBtn.addEventListener('click', () => {
@@ -781,6 +1151,7 @@ inputBtn.addEventListener('click', () => {
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 closeInputBtn.addEventListener('click', () => {
@@ -802,6 +1173,7 @@ lightBtn.addEventListener('click', () => {
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 closeLightBtn.addEventListener('click', () => {
@@ -815,6 +1187,7 @@ fovBtn.addEventListener('click', () => {
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 closeFovBtn.addEventListener('click', () => {
@@ -828,6 +1201,7 @@ colorBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 closeColorBtn.addEventListener('click', () => {
@@ -842,19 +1216,155 @@ colorChoices.forEach((btn) => {
 
 shadowBtn.addEventListener('click', () => {
   shadowPanel.classList.toggle('open');
+  floorPanel.classList.remove('open');
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
 });
 
+shadowDirection.addEventListener('input', () => {
+  shadowDirectionState = Number(shadowDirection.value);
+  updateFloorLabels();
+  updateShadowFromDirectControls();
+});
+
+shadowLength.addEventListener('input', () => {
+  shadowLengthState = Number(shadowLength.value);
+  updateFloorLabels();
+  updateShadowFromDirectControls();
+});
+
+floorHeight.addEventListener('input', () => {
+  floorHeightState = Number(floorHeight.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+floorPitch.addEventListener('input', () => {
+  floorPitchState = Number(floorPitch.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
+toggleFloorDetailsBtn.addEventListener('click', () => {
+  floorDetails.classList.toggle('open');
+  toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
+});
+
+floorBtn.addEventListener('click', () => {
+  floorPanel.classList.toggle('open');
+  updateVirtualFloor();
+  inputPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
+});
+
+closeFloorBtn.addEventListener('click', () => {
+  floorPanel.classList.remove('open');
+  updateVirtualFloor();
+});
+
+floorShadowEnabled.addEventListener('change', () => {
+  floorShadowEnabledState = floorShadowEnabled.checked;
+  syncProjectedShadowRendering();
+  updateVirtualFloor();
+});
+
+floorY.addEventListener('input', () => {
+  floorYState = Number(floorY.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
+floorTilt.addEventListener('input', () => {
+  floorTiltState = Number(floorTilt.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
+floorShadowOpacity.addEventListener('input', () => {
+  floorShadowOpacityState = Number(floorShadowOpacity.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
+floorShadowSoftness.addEventListener('input', () => {
+  floorShadowSoftnessState = Number(floorShadowSoftness.value);
+  updateFloorLabels();
+  updateVirtualFloor();
+});
+
+floorGuideEnabled.addEventListener('change', () => {
+  floorGuideEnabledState = floorGuideEnabled.checked;
+  updateVirtualFloor();
+});
+
+async function setFloorFromDeviceTilt() {
+  try {
+    // iOS requires motion/orientation permission from a direct user gesture.
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') {
+        statusEl.textContent = '傾きセンサーの許可が必要です';
+        return;
+      }
+    }
+
+    useDeviceTiltBtn.disabled = true;
+    useDeviceTiltBtn.textContent = 'iPhoneを静止…';
+    statusEl.textContent = 'iPhoneの傾きを測定中…';
+
+    const samples = [];
+    const onOrientation = (event) => {
+      if (typeof event.beta !== 'number') return;
+      // Portrait: beta is approximately 90° when the screen is vertical and
+      // 0° when the phone lies flat. Convert that to our floor pitch.
+      samples.push(event.beta);
+    };
+    window.addEventListener('deviceorientation', onOrientation);
+
+    await new Promise(resolve => setTimeout(resolve, 650));
+    window.removeEventListener('deviceorientation', onOrientation);
+
+    if (!samples.length) {
+      statusEl.textContent = '傾きを取得できませんでした';
+      return;
+    }
+
+    const beta = samples.reduce((a, b) => a + b, 0) / samples.length;
+    // Camera optical axis follows the phone. A level real floor's apparent
+    // pitch is approximated from the device pitch. Clamp to the UI's useful range.
+    const estimatedTilt = THREE.MathUtils.clamp(90 - Math.abs(beta), -60, 60);
+    floorTiltState = estimatedTilt;
+    floorTilt.value = String(Math.round(estimatedTilt));
+    updateFloorLabels();
+    updateVirtualFloor();
+    statusEl.textContent = `床の傾きを自動設定：${Math.round(estimatedTilt)}°`;
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '傾きセンサーを利用できません';
+  } finally {
+    useDeviceTiltBtn.disabled = false;
+    useDeviceTiltBtn.textContent = '水平を自動設定';
+  }
+}
+
+useDeviceTiltBtn.addEventListener('click', setFloorFromDeviceTilt);
+snapToFloorBtn.addEventListener('click', snapModelToFloor);
+
 blendBtn.addEventListener('click', () => {
   blendPanel.classList.toggle('open');
+  floorPanel.classList.remove('open');
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
@@ -864,6 +1374,7 @@ blendBtn.addEventListener('click', () => {
 
 closeBlendBtn.addEventListener('click', () => {
   blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
 });
 
 blendEnabled.addEventListener('change', () => {
@@ -938,6 +1449,8 @@ updateLightControlState();
 updateInputUI();
 updateShadowLabels();
 updateBlendLabel();
+updateFloorLabels();
+ensureVirtualFloor();
 ensureGroundShadow();
 updateGroundShadow();
 
@@ -957,8 +1470,15 @@ rotateModeBtn.addEventListener('click', () => setInteractionMode('rotate'));
 // 2 fingers = pinch scale + rotate around screen Z axis
 const touches = new Map();
 let gestureStart = null;
+let floorDragPointerId = null;
 
 canvas.addEventListener('pointerdown', (e) => {
+  boostLiveFps();
+  if (floorPointPlacementMode) {
+    e.preventDefault();
+    placeFloorAtScreenPoint(e.clientX, e.clientY);
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   gestureStart = snapshotGesture();
@@ -966,6 +1486,7 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!touches.has(e.pointerId) || !model) return;
+  boostLiveFps();
 
   const prev = touches.get(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -999,8 +1520,10 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 function endPointer(e) {
+  if (floorDragPointerId === e.pointerId) floorDragPointerId = null;
   touches.delete(e.pointerId);
   gestureStart = snapshotGesture();
+  boostLiveFps();
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -1017,6 +1540,13 @@ function snapshotGesture() {
 }
 
 captureBtn.addEventListener('click', () => {
+  lastBackgroundBlob = null;
+  if (lastBackgroundUrl) {
+    URL.revokeObjectURL(lastBackgroundUrl);
+    lastBackgroundUrl = null;
+  }
+  fallbackBackgroundSave.style.display = 'none';
+
   const source = getActiveBackgroundSource();
   if (!source) {
     alert(inputMode === 'photo' ? '写真を選択してください。' : 'カメラの準備ができていません。');
@@ -1038,6 +1568,16 @@ captureBtn.addEventListener('click', () => {
     outW = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssW / cssH));
   }
 
+  // Freeze the exact background frame used by this capture. This gives the
+  // user a clean plate that matches the composite in timing, crop and size.
+  const backgroundOut = document.createElement('canvas');
+  backgroundOut.width = outW;
+  backgroundOut.height = outH;
+  const backgroundCtx = backgroundOut.getContext('2d');
+  backgroundCtx.imageSmoothingEnabled = true;
+  backgroundCtx.imageSmoothingQuality = 'high';
+  drawSourceCover(backgroundCtx, source, outW, outH);
+
   const out = document.createElement('canvas');
   out.width = outW;
   out.height = outH;
@@ -1045,8 +1585,8 @@ captureBtn.addEventListener('click', () => {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Background is composed directly at the final 3000px-class resolution.
-  drawSourceCover(ctx, source, outW, outH);
+  // Start the composite from the frozen clean background frame.
+  ctx.drawImage(backgroundOut, 0, 0);
 
   // Render the 3D layer at higher resolution and shrink it into the final
   // canvas. 2x in each axis = 4x the pixel count for cleaner edges.
@@ -1075,13 +1615,19 @@ captureBtn.addEventListener('click', () => {
   const oldRatio = renderer.getPixelRatio();
 
   try {
+    // Projected shadows use the same 1024 map in preview and capture so the
+    // saved result matches what the user adjusted on screen.
     statusEl.textContent = '高画質で画像作成中…';
 
     renderer.setPixelRatio(1);
     renderer.setSize(renderW, renderH, false);
     camera.aspect = outW / outH;
     camera.updateProjectionMatrix();
+    suppressFloorGuideForCapture = true;
+    updateVirtualFloor();
     renderer.render(scene, camera);
+    suppressFloorGuideForCapture = false;
+    updateVirtualFloor();
 
     // Downsampling is the antialiasing pass.
     ctx.drawImage(renderer.domElement, 0, 0, renderW, renderH, 0, 0, outW, outH);
@@ -1093,15 +1639,30 @@ captureBtn.addEventListener('click', () => {
     renderer.setSize(outW, outH, false);
     camera.aspect = outW / outH;
     camera.updateProjectionMatrix();
+    suppressFloorGuideForCapture = true;
+    updateVirtualFloor();
     renderer.render(scene, camera);
+    suppressFloorGuideForCapture = false;
+    updateVirtualFloor();
     ctx.drawImage(renderer.domElement, 0, 0, outW, outH);
   } finally {
+    suppressFloorGuideForCapture = false;
+    updateVirtualFloor();
     // Restore the lightweight live preview renderer.
     renderer.setPixelRatio(oldRatio);
     renderer.setSize(cssW, cssH, false);
     camera.aspect = cssW / cssH;
     camera.updateProjectionMatrix();
   }
+
+  backgroundOut.toBlob((backgroundBlob) => {
+    if (!backgroundBlob) return;
+    lastBackgroundBlob = backgroundBlob;
+    if (lastBackgroundUrl) URL.revokeObjectURL(lastBackgroundUrl);
+    lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
+    fallbackBackgroundSave.href = lastBackgroundUrl;
+    fallbackBackgroundSave.style.display = 'none';
+  }, 'image/png');
 
   out.toBlob((blob) => {
     if (!blob) {
@@ -1122,29 +1683,30 @@ captureBtn.addEventListener('click', () => {
   }, 'image/png');
 });
 
-shareBtn.addEventListener('click', async () => {
-  if (!lastCaptureBlob) return;
-
-  const file = new File([lastCaptureBlob], 'kani-guitar-photo.png', { type: 'image/png' });
-
+async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
+  if (!blob) return;
+  const file = new File([blob], filename, { type: 'image/png' });
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      await navigator.share({
-        files: [file],
-        title: 'カニギターといっしょ'
-      });
+      await navigator.share({ files: [file], title });
       return;
     }
-
-    // Web Share のファイル共有に未対応の場合だけ従来の保存リンクを表示。
-    fallbackSave.style.display = 'inline-block';
-    alert('このブラウザでは画像共有に対応していないため、「ファイルとして保存」を使ってください。');
+    fallbackLink.style.display = 'inline-block';
+    alert('このブラウザでは画像共有に対応していないため、「ファイル保存」を使ってください。');
   } catch (e) {
     if (e?.name === 'AbortError') return;
     console.error(e);
-    fallbackSave.style.display = 'inline-block';
-    alert('共有を開けませんでした。「ファイルとして保存」を使ってください。');
+    fallbackLink.style.display = 'inline-block';
+    alert('共有を開けませんでした。「ファイル保存」を使ってください。');
   }
+}
+
+shareBtn.addEventListener('click', () => {
+  shareOrSaveBlob(lastCaptureBlob, 'kani-guitar-photo.png', 'カニギターといっしょ', fallbackSave);
+});
+
+shareBackgroundBtn.addEventListener('click', () => {
+  shareOrSaveBlob(lastBackgroundBlob, 'kani-guitar-background.png', '背景写真', fallbackBackgroundSave);
 });
 
 closePreview.addEventListener('click', () => {
