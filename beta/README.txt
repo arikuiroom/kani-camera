@@ -14,7 +14,7 @@ https://arikuiroom.github.io/kani-camera/beta/
 - 正式版への反映は、ユーザーが「正式版にして」と明示したときだけ行います。
 
 現在のベース:
-Kani Camera v1.20.3 beta
+Kani Camera v1.20.4 beta
 
 
 ■ v1.11.2 beta 高解像度保存 + 高品質AA
@@ -382,5 +382,14 @@ Kani Camera v1.20.3 beta
 ■ v1.20.3 beta PSD保存方法修正
 - PSD保存時にWeb Shareを使わず、PSDファイルそのものを直接ダウンロードする方式へ変更しました。
 - iPhoneの共有処理で余計なテキスト項目が同時に扱われる経路をなくしました。
+- ファイル名は CrabguitarYYYYMMDDHHmm.psd のままです。
+- 正式版 v1.18.6 は変更していません。
+
+
+■ v1.20.4 beta PSD保存先選択
+- iPhoneではPSD 1ファイルだけを共有シートへ渡す方式に変更しました。
+- 共有時にtitle/text/urlを付けず、余計なテキスト項目が生成されないようにしました。
+- 共有シートの「ファイルに保存」から、iCloud Drive / このiPhone内 / 任意のフォルダをその都度選べます。
+- Web Share非対応環境では従来どおり直接ダウンロードへフォールバックします。
 - ファイル名は CrabguitarYYYYMMDDHHmm.psd のままです。
 - 正式版 v1.18.6 は変更していません。
