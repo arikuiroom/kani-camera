@@ -1048,13 +1048,23 @@ function resize() {
 }
 addEventListener('resize', resize);
 
-const LIVE_FRAME_INTERVAL = 1000 / 30;
-let lastLiveFrame = -LIVE_FRAME_INTERVAL;
+const IDLE_FRAME_INTERVAL = 1000 / 5;
+const INTERACTION_FRAME_INTERVAL = 1000 / 30;
+const INTERACTION_TAIL_MS = 500;
+let lastLiveFrame = -IDLE_FRAME_INTERVAL;
+let interactionBoostUntil = 0;
+
+function boostLiveFps(now = performance.now()) {
+  interactionBoostUntil = Math.max(interactionBoostUntil, now + INTERACTION_TAIL_MS);
+}
 
 function render(now = 0) {
   requestAnimationFrame(render);
-  if (now - lastLiveFrame < LIVE_FRAME_INTERVAL) return;
-  lastLiveFrame = now - ((now - lastLiveFrame) % LIVE_FRAME_INTERVAL);
+  const frameInterval = (touches.size > 0 || now < interactionBoostUntil)
+    ? INTERACTION_FRAME_INTERVAL
+    : IDLE_FRAME_INTERVAL;
+  if (now - lastLiveFrame < frameInterval) return;
+  lastLiveFrame = now - ((now - lastLiveFrame) % frameInterval);
 
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
@@ -1463,6 +1473,7 @@ let gestureStart = null;
 let floorDragPointerId = null;
 
 canvas.addEventListener('pointerdown', (e) => {
+  boostLiveFps();
   if (floorPointPlacementMode) {
     e.preventDefault();
     placeFloorAtScreenPoint(e.clientX, e.clientY);
@@ -1475,6 +1486,7 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!touches.has(e.pointerId) || !model) return;
+  boostLiveFps();
 
   const prev = touches.get(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1511,6 +1523,7 @@ function endPointer(e) {
   if (floorDragPointerId === e.pointerId) floorDragPointerId = null;
   touches.delete(e.pointerId);
   gestureStart = snapshotGesture();
+  boostLiveFps();
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
