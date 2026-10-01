@@ -114,16 +114,47 @@ let lastBackgroundUrl = null;
 
 const DEFAULT_FOV = 42;
 
-// High-quality capture (Beta v1.10)
-// Final image long edge is 3000 px.
-// The 3D layer is normally rendered at 2x width/height (4x pixel count)
-// and then downsampled for smoother antialiasing.
-const CAPTURE_LONG_EDGE = 3000;
+// Fixed 16:9 4K UHD capture. Portrait uses the rotated equivalent.
+const CAPTURE_LONG_EDGE = 3840;
+const CAPTURE_SHORT_EDGE = 2160;
 const CAPTURE_SUPERSAMPLE = 2;
-const CAPTURE_RENDER_EDGE_CAP = 6000;
+const CAPTURE_RENDER_EDGE_CAP = 7680;
+
+function getCaptureViewport() {
+  const screenW = innerWidth;
+  const screenH = innerHeight;
+  const portrait = screenH >= screenW;
+  const aspect = portrait ? 9 / 16 : 16 / 9;
+  let width = screenW;
+  let height = width / aspect;
+  if (height > screenH) {
+    height = screenH;
+    width = height * aspect;
+  }
+  return {
+    width,
+    height,
+    left: (screenW - width) / 2,
+    top: (screenH - height) / 2,
+    portrait
+  };
+}
+
+function applyCaptureViewport() {
+  const v = getCaptureViewport();
+  document.documentElement.style.setProperty('--capture-left', `${v.left}px`);
+  document.documentElement.style.setProperty('--capture-top', `${v.top}px`);
+  document.documentElement.style.setProperty('--capture-width', `${v.width}px`);
+  document.documentElement.style.setProperty('--capture-height', `${v.height}px`);
+  camera.aspect = v.width / v.height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(v.width, v.height, false);
+  return v;
+}
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, innerWidth / innerHeight, 0.01, 100);
+const initialViewport = getCaptureViewport();
+const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, initialViewport.width / initialViewport.height, 0.01, 100);
 camera.position.set(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({
@@ -136,7 +167,11 @@ const renderer = new THREE.WebGLRenderer({
 // renders at its own output resolution, so saved-image quality is unaffected.
 const LIVE_PIXEL_RATIO_CAP = 1.5;
 renderer.setPixelRatio(Math.min(devicePixelRatio, LIVE_PIXEL_RATIO_CAP));
-renderer.setSize(innerWidth, innerHeight, false);
+renderer.setSize(initialViewport.width, initialViewport.height, false);
+document.documentElement.style.setProperty('--capture-left', `${initialViewport.left}px`);
+document.documentElement.style.setProperty('--capture-top', `${initialViewport.top}px`);
+document.documentElement.style.setProperty('--capture-width', `${initialViewport.width}px`);
+document.documentElement.style.setProperty('--capture-height', `${initialViewport.height}px`);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1043,13 +1078,10 @@ loader.load(
 );
 
 function resize() {
-  const w = innerWidth;
-  const h = innerHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h, false);
+  applyCaptureViewport();
 }
 addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 120));
 
 const IDLE_FRAME_INTERVAL = 1000 / 5;
 const INTERACTION_FRAME_INTERVAL = 1000 / 30;
@@ -1619,20 +1651,13 @@ captureBtn.addEventListener('click', () => {
     return;
   }
 
-  const cssW = innerWidth;
-  const cssH = innerHeight;
+  const liveViewport = getCaptureViewport();
+  const cssW = liveViewport.width;
+  const cssH = liveViewport.height;
 
-  // Keep exactly the same aspect ratio as the live preview, but export at
-  // approximately 3000 px on the long edge.
-  let outW;
-  let outH;
-  if (cssW >= cssH) {
-    outW = CAPTURE_LONG_EDGE;
-    outH = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssH / cssW));
-  } else {
-    outH = CAPTURE_LONG_EDGE;
-    outW = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssW / cssH));
-  }
+  // Export the exact 16:9 live frame at 4K UHD.
+  const outW = liveViewport.portrait ? CAPTURE_SHORT_EDGE : CAPTURE_LONG_EDGE;
+  const outH = liveViewport.portrait ? CAPTURE_LONG_EDGE : CAPTURE_SHORT_EDGE;
 
   // Freeze the exact background frame used by this capture. This gives the
   // user a clean plate that matches the composite in timing, crop and size.
@@ -1700,7 +1725,7 @@ captureBtn.addEventListener('click', () => {
   } catch (e) {
     console.error('High-quality capture failed:', e);
 
-    // Fallback: still export at 3000px, just without supersampling.
+    // Fallback: still export at 4K UHD, just without supersampling.
     renderer.setPixelRatio(1);
     renderer.setSize(outW, outH, false);
     camera.aspect = outW / outH;
