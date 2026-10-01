@@ -14,7 +14,7 @@ https://arikuiroom.github.io/kani-camera/beta/
 - 正式版への反映は、ユーザーが「正式版にして」と明示したときだけ行います。
 
 現在のベース:
-Kani Camera v1.13.0 beta
+Kani Camera v1.13.1 beta
 
 
 ■ v1.11.2 beta 高解像度保存 + 高品質AA
@@ -111,3 +111,11 @@ Kani Camera v1.13.0 beta
 - 投影影の濃さ・ぼけを床パネルから調整できます。
 - 従来の楕円接地影は機能を残しつつ初期状態をOFFにしました。
 - 正式版 v1.12.4 は変更していません。
+
+
+■ v1.13.1 beta iPhone傾き自動設定 + 投影影ぼけ修正
+- 仮想床に「水平を自動設定」を追加しました。iPhoneのDeviceOrientationから端末ピッチを取得し、床の傾きへ反映します。
+- iOSで必要な場合はボタン操作時にモーション/向きセンサーの許可を要求します。
+- v1.13.0ではPCFSoftShadowMapに対してradiusを変更していたため、ぼけ調整がほぼ反映されませんでした。
+- VSMShadowMapへ変更し、radiusとblurSamplesを「影のぼけ」スライダーへ連動させました。
+- 正式版は変更していません。
