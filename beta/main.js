@@ -1206,11 +1206,13 @@ function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
   button.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     longPressed = false;
+    try { button.setPointerCapture(e.pointerId); } catch {}
     holdTimer = setTimeout(() => {
       longPressed = true;
-      const wasOpen = panel.classList.contains('open');
-      closeAdjustmentPanels(panel);
-      if (!wasOpen) {
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      } else {
+        closeAdjustmentPanels();
         panel.classList.add('open');
         if (afterOpen) afterOpen();
       }
@@ -1218,13 +1220,15 @@ function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
     }, HOLD_MS);
   });
 
-  const finish = () => {
+  const finish = (e) => {
     if (holdTimer) clearTimeout(holdTimer);
     holdTimer = null;
+    if (e && button.hasPointerCapture?.(e.pointerId)) {
+      try { button.releasePointerCapture(e.pointerId); } catch {}
+    }
   };
   button.addEventListener('pointerup', finish);
   button.addEventListener('pointercancel', finish);
-  button.addEventListener('pointerleave', finish);
 
   button.addEventListener('click', (e) => {
     if (longPressed) {
