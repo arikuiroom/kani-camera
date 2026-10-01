@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.16 beta</title>
+<title>カニギター カメラ v1.20.17 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -604,6 +604,46 @@
       text-align: center;
     }
     #startCard h1 { margin: 0 0 10px; font-size: 28px; }
+
+    /* Landscape: keep every control anchored where portrait puts it.
+       Rotate only the readable/control surfaces to match the phone orientation. */
+    @media (orientation: landscape) {
+      .top-actions > button,
+      #flipBtn,
+      #resetBtn,
+      .mode-switch,
+      #morePanel,
+      #lightPanel,
+      #fovPanel,
+      #colorPanel,
+      #inputPanel,
+      #shadowPanel,
+      #blendPanel,
+      #floorPanel,
+      #savePanel {
+        transform: rotate(90deg);
+      }
+      .top-actions > button,
+      #flipBtn,
+      #resetBtn {
+        transform-origin: center;
+      }
+      .mode-switch {
+        transform: translateX(-50%) rotate(90deg);
+        transform-origin: center;
+      }
+      #morePanel,
+      #lightPanel,
+      #fovPanel,
+      #colorPanel,
+      #inputPanel,
+      #shadowPanel,
+      #blendPanel,
+      #floorPanel,
+      #savePanel {
+        transform-origin: top right;
+      }
+    }
   </style>
 </head>
 <body>
@@ -630,7 +670,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.16 beta</div>
+      <div class="menu-version">Kani Camera v1.20.17 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -866,7 +906,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.16 beta</div>
+      <div class="start-version">Kani Camera v1.20.17 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
