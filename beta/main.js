@@ -103,6 +103,8 @@ const savePanel = document.getElementById('savePanel');
 const closeSaveBtn = document.getElementById('closeSaveBtn');
 const formatJpegBtn = document.getElementById('formatJpegBtn');
 const formatPngBtn = document.getElementById('formatPngBtn');
+const previewFormatJpegBtn = document.getElementById('previewFormatJpegBtn');
+const previewFormatPngBtn = document.getElementById('previewFormatPngBtn');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -116,7 +118,17 @@ let lastCaptureBlob = null;
 let lastCaptureUrl = null;
 let lastBackgroundBlob = null;
 let lastBackgroundUrl = null;
-let saveFormat = 'jpeg';
+let lastCaptureCanvas = null;
+let lastBackgroundCanvas = null;
+const SAVE_FORMAT_KEY = 'kani-camera-save-format';
+let saveFormat = (() => {
+  try {
+    const stored = localStorage.getItem(SAVE_FORMAT_KEY);
+    return stored === 'png' ? 'png' : 'jpeg';
+  } catch {
+    return 'jpeg';
+  }
+})();
 const JPEG_QUALITY = 0.92;
 
 function getSaveMime() {
@@ -126,8 +138,47 @@ function getSaveExtension() {
   return saveFormat === 'png' ? 'png' : 'jpg';
 }
 function syncSaveFormatUI() {
-  formatJpegBtn.classList.toggle('active', saveFormat === 'jpeg');
-  formatPngBtn.classList.toggle('active', saveFormat === 'png');
+  const jpeg = saveFormat === 'jpeg';
+  formatJpegBtn.classList.toggle('active', jpeg);
+  formatPngBtn.classList.toggle('active', !jpeg);
+  previewFormatJpegBtn.classList.toggle('active', jpeg);
+  previewFormatPngBtn.classList.toggle('active', !jpeg);
+}
+function setSaveFormat(format) {
+  saveFormat = format === 'png' ? 'png' : 'jpeg';
+  try { localStorage.setItem(SAVE_FORMAT_KEY, saveFormat); } catch {}
+  syncSaveFormatUI();
+}
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
+  });
+}
+async function rebuildSavedBlobsForFormat() {
+  if (!lastCaptureCanvas || !lastBackgroundCanvas) return;
+  const [backgroundBlob, captureBlob] = await Promise.all([
+    canvasToBlob(lastBackgroundCanvas),
+    canvasToBlob(lastCaptureCanvas)
+  ]);
+  if (!backgroundBlob || !captureBlob) return;
+
+  lastBackgroundBlob = backgroundBlob;
+  if (lastBackgroundUrl) URL.revokeObjectURL(lastBackgroundUrl);
+  lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
+  fallbackBackgroundSave.href = lastBackgroundUrl;
+  fallbackBackgroundSave.style.display = 'none';
+
+  lastCaptureBlob = captureBlob;
+  if (lastCaptureUrl) URL.revokeObjectURL(lastCaptureUrl);
+  lastCaptureUrl = URL.createObjectURL(captureBlob);
+  previewImg.src = lastCaptureUrl;
+  fallbackSave.href = lastCaptureUrl;
+  fallbackSave.style.display = 'none';
+
+  const ext = getSaveExtension();
+  fallbackSave.download = `kani-guitar-photo.${ext}`;
+  fallbackBackgroundSave.download = `kani-guitar-background.${ext}`;
+  saveHelp.textContent = `保存解像度：${lastCaptureCanvas.width} × ${lastCaptureCanvas.height} px / ${saveFormat === 'png' ? 'PNG' : 'JPEG'}`;
 }
 
 const DEFAULT_FOV = 42;
@@ -1663,14 +1714,19 @@ saveSettingsBtn.addEventListener('click', () => {
   syncSaveFormatUI();
 });
 closeSaveBtn.addEventListener('click', () => savePanel.classList.remove('open'));
-formatJpegBtn.addEventListener('click', () => {
-  saveFormat = 'jpeg';
-  syncSaveFormatUI();
+formatJpegBtn.addEventListener('click', () => setSaveFormat('jpeg'));
+formatPngBtn.addEventListener('click', () => setSaveFormat('png'));
+previewFormatJpegBtn.addEventListener('click', async () => {
+  if (saveFormat === 'jpeg') return;
+  setSaveFormat('jpeg');
+  await rebuildSavedBlobsForFormat();
 });
-formatPngBtn.addEventListener('click', () => {
-  saveFormat = 'png';
-  syncSaveFormatUI();
+previewFormatPngBtn.addEventListener('click', async () => {
+  if (saveFormat === 'png') return;
+  setSaveFormat('png');
+  await rebuildSavedBlobsForFormat();
 });
+syncSaveFormatUI();
 
 captureBtn.addEventListener('click', () => {
   lastBackgroundBlob = null;
@@ -1780,6 +1836,9 @@ captureBtn.addEventListener('click', () => {
     camera.aspect = cssW / cssH;
     camera.updateProjectionMatrix();
   }
+
+  lastBackgroundCanvas = backgroundOut;
+  lastCaptureCanvas = out;
 
   backgroundOut.toBlob((backgroundBlob) => {
     if (!backgroundBlob) return;
