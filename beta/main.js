@@ -53,6 +53,7 @@ const shadowDirectionOut = document.getElementById('shadowDirectionOut');
 const shadowLength = document.getElementById('shadowLength');
 const shadowLengthOut = document.getElementById('shadowLengthOut');
 const floorPointMarker = document.getElementById('floorPointMarker');
+const floorPivotMarker = document.getElementById('floorPivotMarker');
 const floorHeight = document.getElementById('floorHeight');
 const floorHeightOut = document.getElementById('floorHeightOut');
 const floorPitch = document.getElementById('floorPitch');
@@ -165,6 +166,7 @@ scene.add(key);
 scene.add(key.target);
 
 // ---- Virtual floor + projected shadow ------------------------------------
+let floorPivot = null;
 let virtualFloor = null;
 let floorGuide = null;
 let floorShadowEnabledState = true;
@@ -189,7 +191,15 @@ let modelFootOffsetY = -0.55;
 let suppressFloorGuideForCapture = false;
 
 function ensureVirtualFloor() {
-  if (virtualFloor) return;
+  if (floorPivot) return;
+
+  // Dedicated pivot: this object is the ONLY world-space anchor for the floor.
+  // The receiver and guide live at local (0,0,0), so their rotation can never
+  // orbit around the camera or another world-space point.
+  floorPivot = new THREE.Group();
+  floorPivot.name = 'VirtualFloorPivot';
+  scene.add(floorPivot);
+
   const geometry = new THREE.PlaneGeometry(12, 12);
   const shadowMaterial = new THREE.ShadowMaterial({
     color: 0x000000,
@@ -200,7 +210,8 @@ function ensureVirtualFloor() {
   virtualFloor = new THREE.Mesh(geometry, shadowMaterial);
   virtualFloor.receiveShadow = true;
   virtualFloor.renderOrder = -50;
-  scene.add(virtualFloor);
+  virtualFloor.position.set(0, 0, 0);
+  floorPivot.add(virtualFloor);
 
   const guideGeometry = new THREE.PlaneGeometry(6, 6, 6, 6);
   const guideMaterial = new THREE.MeshBasicMaterial({
@@ -212,56 +223,73 @@ function ensureVirtualFloor() {
   });
   floorGuide = new THREE.Mesh(guideGeometry, guideMaterial);
   floorGuide.renderOrder = -60;
-  scene.add(floorGuide);
+  floorGuide.position.set(0, 0, 0);
+  floorPivot.add(floorGuide);
   updateVirtualFloor();
+}
+
+function updateFloorPivotMarker() {
+  if (!floorPivot || !floorPanel.classList.contains('open') || suppressFloorGuideForCapture) {
+    floorPivotMarker.classList.remove('visible');
+    return;
+  }
+  const p = floorPivot.position.clone().project(camera);
+  const x = (p.x * 0.5 + 0.5) * innerWidth;
+  const y = (-p.y * 0.5 + 0.5) * innerHeight;
+  floorPivotMarker.style.left = `${x}px`;
+  floorPivotMarker.style.top = `${y}px`;
+  floorPivotMarker.classList.add('visible');
 }
 
 function updateVirtualFloor() {
   ensureVirtualFloor();
 
-  // Anchor the receiver to the model's current lowest point. The offset lets
-  // the user nudge the floor in screen X/Y without breaking model-following.
-  let anchorX = floorOffsetX;
-  let anchorY = floorYState + floorOffsetY;
-  let anchorZ = -0.25;
+  // Pivot follows the crab-guitar foot point. Height is applied to the pivot
+  // itself. Rotation happens only on the pivot; the floor remains centered at
+  // local origin. This makes the yellow + the true rotation center identical.
+  let pivotX = floorOffsetX;
+  let pivotY = floorYState + floorOffsetY + floorHeightState;
+  let pivotZ = 0;
   if (model) {
     const box = new THREE.Box3().setFromObject(model);
     if (!box.isEmpty()) {
-      anchorX += model.position.x;
-      anchorY = box.min.y + floorHeightState + floorOffsetY;
-      anchorZ = model.position.z - 0.25;
+      pivotX += model.position.x;
+      pivotY = box.min.y + floorHeightState + floorOffsetY;
+      // Use the model's actual depth as the pivot. v1.16.1 used z - 0.25,
+      // which visually shifted the apparent rotation center toward the camera.
+      pivotZ = model.position.z;
     }
   }
 
-  const pitch = THREE.MathUtils.degToRad(floorPitchState);
-  const roll = THREE.MathUtils.degToRad(floorRollState);
-
-  // The floor's world position is its CENTER. Translation (including the
-  // height offset from the crab guitar) is resolved first; rotation is then
-  // applied around the PlaneGeometry's local origin = its own center.
-  // This keeps a detached floor from orbiting around the crab-guitar anchor.
-  virtualFloor.position.set(anchorX, anchorY, anchorZ);
-  virtualFloor.quaternion.setFromEuler(
-    new THREE.Euler(-Math.PI / 2 + pitch, 0, roll, 'XYZ')
+  floorPivot.position.set(pivotX, pivotY, pivotZ);
+  floorPivot.rotation.set(
+    THREE.MathUtils.degToRad(floorPitchState),
+    0,
+    THREE.MathUtils.degToRad(floorRollState),
+    'XYZ'
   );
-  virtualFloor.scale.setScalar(floorScaleState);
+  floorPivot.scale.setScalar(floorScaleState);
+  floorPivot.updateMatrixWorld(true);
+
+  // PlaneGeometry starts in XY, so lay each child flat locally. The pivot then
+  // supplies only the user's pitch/roll around the exact foot-point origin.
+  virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
   virtualFloor.material.opacity = floorShadowOpacityState;
   virtualFloor.visible = floorShadowEnabledState;
   virtualFloor.updateMatrixWorld(true);
 
-  floorGuide.position.copy(virtualFloor.position);
-  floorGuide.quaternion.copy(virtualFloor.quaternion);
-  floorGuide.scale.copy(virtualFloor.scale);
-  floorGuide.updateMatrixWorld(true);
+  floorGuide.rotation.set(-Math.PI / 2, 0, 0);
   floorGuide.visible = floorGuideEnabledState && floorPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+  floorGuide.updateMatrixWorld(true);
 
-  // 0 means effectively no added blur; increase smoothly from there.
   key.shadow.radius = floorShadowSoftnessState * 18;
   key.shadow.blurSamples = floorShadowSoftnessState <= 0.001
     ? 1
     : Math.round(2 + floorShadowSoftnessState * 22);
-  key.target.position.set(anchorX, anchorY, model ? model.position.z : 0);
+  key.target.position.copy(floorPivot.position);
   key.target.updateMatrixWorld();
+
+  updateFloorPivotMarker();
 }
 
 function updateFloorLabels() {
