@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.16.1 beta</title>
+<title>カニギター カメラ v1.16.2 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -338,6 +338,27 @@
     #floorPointMarker::before { width: 18px; height: 2px; }
     #floorPointMarker::after { width: 2px; height: 18px; }
     #floorPointMarker.active { display: block; }
+    #floorPivotMarker {
+      display: none;
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 4;
+    }
+    #floorPivotMarker::before, #floorPivotMarker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      background: #ffdf4d;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 1px 3px rgba(0,0,0,.8);
+    }
+    #floorPivotMarker::before { width: 28px; height: 2px; }
+    #floorPivotMarker::after { width: 2px; height: 28px; }
+    #floorPivotMarker.visible { display: block; }
     .floor-details { display: none; }
     .floor-details.open { display: block; }
     .capture {
@@ -644,6 +665,7 @@
       <p class="light-note">背景の色味と明るさを強めに反映するテスト版です。暗い写真ではカニギターも大きく暗くなります。</p>
     </div>
     <div id="floorPointMarker" aria-hidden="true"></div>
+    <div id="floorPivotMarker" aria-hidden="true"></div>
     <div id="hint" class="hint">
       「移動」：1本指で位置を移動<br>
       「3D回転」：1本指で向きを変更<br>
@@ -658,7 +680,7 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">Kani Camera v1.16.1 beta</div>
+    <div class="version-badge">Kani Camera v1.16.2 beta</div>
   </div>
 
   <div id="preview">
@@ -674,7 +696,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.16.1 beta</div>
+      <div class="start-version">Kani Camera v1.16.2 beta</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
