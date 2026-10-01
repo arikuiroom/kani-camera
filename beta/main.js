@@ -153,10 +153,12 @@ function ensureGroundShadow() {
     transparent: true,
     opacity: shadowOpacityState,
     depthWrite: false,
-    depthTest: true
+    // The contact shadow is a compositing layer, not real scene geometry.
+    // Do not let its depth ever cover the crab-guitar when the model rotates.
+    depthTest: false
   });
   groundShadow = new THREE.Sprite(mat);
-  groundShadow.renderOrder = 0;
+  groundShadow.renderOrder = -100;
   groundShadow.position.set(0, -0.2, -0.3);
   scene.add(groundShadow);
   return groundShadow;
@@ -652,6 +654,9 @@ loader.load(
       if (!child.isMesh) return;
       child.castShadow = false;
       child.receiveShadow = false;
+      // Always draw the crab-guitar after helper/compositing layers such as
+      // the fake contact shadow.
+      child.renderOrder = 100;
 
       // Use one predictable PBR material so FBX material colors do not tint
       // the Albedo red. The supplied maps control color, metalness and roughness.
