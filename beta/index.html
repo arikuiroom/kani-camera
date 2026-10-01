@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.17.2 beta</title>
+<title>カニギター カメラ v1.17.3 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -415,8 +415,12 @@
       background: white;
       color: #111;
     }
-    #fallbackSave {
+    #fallbackSave, #fallbackBackgroundSave {
       display: none;
+      background: rgba(255,255,255,.16);
+      color: white;
+    }
+    #shareBackgroundBtn {
       background: rgba(255,255,255,.16);
       color: white;
     }
@@ -680,14 +684,16 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">Kani Camera v1.17.2 beta</div>
+    <div class="version-badge">Kani Camera v1.17.3 beta</div>
   </div>
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-actions">
-      <button id="shareBtn">共有 / 写真に保存</button>
-      <a id="fallbackSave" download="kani-guitar-photo.png">ファイルとして保存</a>
+      <button id="shareBtn">合成写真を保存</button>
+      <button id="shareBackgroundBtn">背景写真を保存</button>
+      <a id="fallbackSave" download="kani-guitar-photo.png">合成写真をファイル保存</a>
+      <a id="fallbackBackgroundSave" download="kani-guitar-background.png">背景写真をファイル保存</a>
       <button id="closePreview">閉じる</button>
     </div>
     <p id="saveHelp">保存画像は長辺約3000px。カニギターは高解像度でレンダリングして縮小し、輪郭をなめらかにしています。</p>
@@ -696,7 +702,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.17.2 beta</div>
+      <div class="start-version">Kani Camera v1.17.3 beta</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
