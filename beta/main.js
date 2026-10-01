@@ -124,7 +124,10 @@ const renderer = new THREE.WebGLRenderer({
   antialias: true,
   preserveDrawingBuffer: true
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Power-saving live preview: cap DPR. High-resolution capture temporarily
+// renders at its own output resolution, so saved-image quality is unaffected.
+const LIVE_PIXEL_RATIO_CAP = 1.5;
+renderer.setPixelRatio(Math.min(devicePixelRatio, LIVE_PIXEL_RATIO_CAP));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -146,7 +149,9 @@ scene.add(hemi);
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
 key.position.set(2, 3, 4);
 key.castShadow = true;
-key.shadow.mapSize.set(1024, 1024);
+const LIVE_SHADOW_MAP_SIZE = 512;
+const CAPTURE_SHADOW_MAP_SIZE = 1024;
+key.shadow.mapSize.set(LIVE_SHADOW_MAP_SIZE, LIVE_SHADOW_MAP_SIZE);
 key.shadow.camera.left = -4;
 key.shadow.camera.right = 4;
 key.shadow.camera.top = 4;
@@ -546,7 +551,7 @@ function updateAdaptiveLighting(now) {
   const source = getActiveBackgroundSource();
   if (!source) return;
   if (!autoLightingEnabled && !blendEnabledState) return;
-  if (now - lastLightSample < 400) return;
+  if (now - lastLightSample < 600) return;
   lastLightSample = now;
 
   const w = lightSampleCanvas.width;
@@ -683,7 +688,7 @@ async function activateCameraMode() {
   video.style.display = 'block';
   updateInputUI();
   closeTopPanels();
-  statusEl.textContent = 'カメラ起動中';
+  statusEl.textContent = 'カメラ起動中・省電力30fps';
   await startCamera();
 }
 
@@ -788,7 +793,7 @@ function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 250) return; // about 4 updates/sec
+  if (now - lastEnvUpdate < 500) return; // power-saving: about 2 updates/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
@@ -948,15 +953,21 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+const LIVE_FRAME_INTERVAL = 1000 / 30;
+let lastLiveFrame = -LIVE_FRAME_INTERVAL;
+
 function render(now = 0) {
+  requestAnimationFrame(render);
+  if (now - lastLiveFrame < LIVE_FRAME_INTERVAL) return;
+  lastLiveFrame = now - ((now - lastLiveFrame) % LIVE_FRAME_INTERVAL);
+
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
   updateGroundShadow();
   updateVirtualFloor();
   renderer.render(scene, camera);
-  requestAnimationFrame(render);
 }
-render();
+requestAnimationFrame(render);
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -973,8 +984,11 @@ async function startCamera() {
       audio: false,
       video: {
         facingMode: { ideal: facingMode },
-        width: { ideal: 3840 },
-        height: { ideal: 2160 }
+        // 1080p is ample for the live camera background and substantially
+        // cheaper than requesting 4K continuously on iPhone.
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 }
       }
     });
     inputMode = 'camera';
@@ -1469,8 +1483,19 @@ captureBtn.addEventListener('click', () => {
   const renderH = Math.max(outH, Math.floor(outH * supersample));
 
   const oldRatio = renderer.getPixelRatio();
+  const oldShadowMapWidth = key.shadow.mapSize.width;
+  const oldShadowMapHeight = key.shadow.mapSize.height;
 
   try {
+    // Capture only: restore the higher-quality projected shadow.
+    if (oldShadowMapWidth !== CAPTURE_SHADOW_MAP_SIZE || oldShadowMapHeight !== CAPTURE_SHADOW_MAP_SIZE) {
+      key.shadow.mapSize.set(CAPTURE_SHADOW_MAP_SIZE, CAPTURE_SHADOW_MAP_SIZE);
+      if (key.shadow.map) {
+        key.shadow.map.dispose();
+        key.shadow.map = null;
+      }
+      key.shadow.needsUpdate = true;
+    }
     statusEl.textContent = '高画質で画像作成中…';
 
     renderer.setPixelRatio(1);
@@ -1502,6 +1527,15 @@ captureBtn.addEventListener('click', () => {
   } finally {
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    // Restore the lightweight live-preview shadow map.
+    if (key.shadow.mapSize.width !== LIVE_SHADOW_MAP_SIZE || key.shadow.mapSize.height !== LIVE_SHADOW_MAP_SIZE) {
+      key.shadow.mapSize.set(LIVE_SHADOW_MAP_SIZE, LIVE_SHADOW_MAP_SIZE);
+      if (key.shadow.map) {
+        key.shadow.map.dispose();
+        key.shadow.map = null;
+      }
+      key.shadow.needsUpdate = true;
+    }
     // Restore the lightweight live preview renderer.
     renderer.setPixelRatio(oldRatio);
     renderer.setSize(cssW, cssH, false);
