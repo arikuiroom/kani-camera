@@ -1306,36 +1306,21 @@ function syncQuickToggleButtons() {
   floorBtn.classList.toggle('active', floorShadowEnabled.checked);
 }
 
-function installQuickToggle(button, toggleAction) {
+function installQuickMenu(button, panel, afterOpen = null) {
   button.addEventListener('click', () => {
-    toggleAction();
-    syncQuickToggleButtons();
+    const willOpen = !panel.classList.contains('open');
+    closeAdjustmentPanels();
+    if (willOpen) {
+      panel.classList.add('open');
+      if (afterOpen) afterOpen();
+    }
   });
 }
 
-installQuickToggle(lightBtn, () => {
-  autoLight.checked = !autoLight.checked;
-  updateLightControlState();
-});
-
-installQuickToggle(blendBtn, () => {
-  blendEnabled.checked = !blendEnabled.checked;
-  blendEnabledState = blendEnabled.checked;
-  if (!blendEnabledState) resetBackgroundBlend();
-});
-
-installQuickToggle(shadowBtn, () => {
-  shadowEnabled.checked = !shadowEnabled.checked;
-  shadowEnabledState = shadowEnabled.checked;
-  updateGroundShadow();
-});
-
-installQuickToggle(floorBtn, () => {
-  floorShadowEnabled.checked = !floorShadowEnabled.checked;
-  floorShadowEnabledState = floorShadowEnabled.checked;
-  syncProjectedShadowRendering();
-  updateVirtualFloor();
-});
+installQuickMenu(lightBtn, lightPanel);
+installQuickMenu(blendBtn, blendPanel);
+installQuickMenu(shadowBtn, shadowPanel);
+installQuickMenu(floorBtn, floorPanel, updateVirtualFloor);
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
