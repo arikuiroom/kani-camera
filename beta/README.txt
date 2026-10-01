@@ -14,7 +14,7 @@ https://arikuiroom.github.io/kani-camera/beta/
 - 正式版への反映は、ユーザーが「正式版にして」と明示したときだけ行います。
 
 現在のベース:
-Kani Camera v1.20.0 beta
+Kani Camera v1.20.1 beta
 
 
 ■ v1.11.2 beta 高解像度保存 + 高品質AA
@@ -363,4 +363,11 @@ Kani Camera v1.20.0 beta
 - Crabguitarは透明背景のカニギター本体、Shadowは丸影・床の投影影、BGは撮影時の背景です。
 - PSD生成はボタンを押した時だけ行い、通常のJPEG/PNG撮影には追加負荷をかけません。
 - ブラウザでのPSD生成にはag-psd 6.2.0を使用します。
+- 正式版 v1.18.6 は変更していません。
+
+
+■ v1.20.1 beta PSDレイヤー順・ファイル名修正
+- Photoshopで上から Crabguitar / Shadow / BG と表示されるよう、PSD内部のレイヤー格納順を修正しました。
+- PSDファイル名を Crabguitar[YYYYMMDDHHmm].psd 形式へ変更しました。
+- 日時はPSDを書き出した端末のローカル日時を使用します。
 - 正式版 v1.18.6 は変更していません。
