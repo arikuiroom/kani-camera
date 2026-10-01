@@ -14,6 +14,8 @@ const captureBtn = document.getElementById('captureBtn');
 const resetBtn = document.getElementById('resetBtn');
 const flipBtn = document.getElementById('flipBtn');
 const hideBtn = document.getElementById('hideBtn');
+const moreBtn = document.getElementById('moreBtn');
+const morePanel = document.getElementById('morePanel');
 const inputBtn = document.getElementById('inputBtn');
 const inputPanel = document.getElementById('inputPanel');
 const closeInputBtn = document.getElementById('closeInputBtn');
@@ -95,6 +97,7 @@ const shareBackgroundBtn = document.getElementById('shareBackgroundBtn');
 const fallbackSave = document.getElementById('fallbackSave');
 const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
+const saveHelp = document.getElementById('saveHelp');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -1141,7 +1144,22 @@ hideBtn.addEventListener('click', () => {
   if (!model) return;
   modelVisible = !modelVisible;
   model.visible = modelVisible;
-  hideBtn.textContent = modelVisible ? '隠す' : '表示';
+  hideBtn.textContent = modelVisible ? 'カニギターを隠す' : 'カニギターを表示';
+});
+
+moreBtn.addEventListener('click', () => {
+  morePanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
+  floorPanel.classList.remove('open');
+});
+
+[inputBtn, colorBtn, hideBtn].forEach((btn) => {
+  btn.addEventListener('click', () => morePanel.classList.remove('open'));
 });
 
 inputBtn.addEventListener('click', () => {
@@ -1166,15 +1184,88 @@ pickPhotoBtn.addEventListener('click', () => {
   photoPicker.click();
 });
 
-lightBtn.addEventListener('click', () => {
-  lightPanel.classList.toggle('open');
-  inputPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-  floorPanel.classList.remove('open');
+function closeAdjustmentPanels(except = null) {
+  [inputPanel, fovPanel, colorPanel, lightPanel, shadowPanel, blendPanel, floorPanel, morePanel]
+    .forEach((panel) => {
+      if (panel !== except) panel.classList.remove('open');
+    });
+}
+
+function syncQuickToggleButtons() {
+  blendBtn.classList.toggle('active', blendEnabled.checked);
+  lightBtn.classList.toggle('active', autoLight.checked);
+  shadowBtn.classList.toggle('active', shadowEnabled.checked);
+  floorBtn.classList.toggle('active', floorShadowEnabled.checked);
+}
+
+function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
+  const HOLD_MS = 520;
+  let holdTimer = null;
+  let longPressed = false;
+
+  button.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    longPressed = false;
+    try { button.setPointerCapture(e.pointerId); } catch {}
+    holdTimer = setTimeout(() => {
+      longPressed = true;
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      } else {
+        closeAdjustmentPanels();
+        panel.classList.add('open');
+        if (afterOpen) afterOpen();
+      }
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, HOLD_MS);
+  });
+
+  const finish = (e) => {
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = null;
+    if (e && button.hasPointerCapture?.(e.pointerId)) {
+      try { button.releasePointerCapture(e.pointerId); } catch {}
+    }
+  };
+  button.addEventListener('pointerup', finish);
+  button.addEventListener('pointercancel', finish);
+
+  button.addEventListener('click', (e) => {
+    if (longPressed) {
+      e.preventDefault();
+      longPressed = false;
+      return;
+    }
+    toggleAction();
+    syncQuickToggleButtons();
+  });
+
+  button.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+installTapHoldControl(lightBtn, lightPanel, () => {
+  autoLight.checked = !autoLight.checked;
+  updateLightControlState();
 });
+
+installTapHoldControl(blendBtn, blendPanel, () => {
+  blendEnabled.checked = !blendEnabled.checked;
+  blendEnabledState = blendEnabled.checked;
+  if (!blendEnabledState) resetBackgroundBlend();
+});
+
+installTapHoldControl(shadowBtn, shadowPanel, () => {
+  shadowEnabled.checked = !shadowEnabled.checked;
+  shadowEnabledState = shadowEnabled.checked;
+  updateGroundShadow();
+});
+
+installTapHoldControl(floorBtn, floorPanel, () => {
+  floorShadowEnabled.checked = !floorShadowEnabled.checked;
+  floorShadowEnabledState = floorShadowEnabled.checked;
+  syncProjectedShadowRendering();
+  updateVirtualFloor();
+}, updateVirtualFloor);
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
@@ -1214,17 +1305,6 @@ colorChoices.forEach((btn) => {
   });
 });
 
-shadowBtn.addEventListener('click', () => {
-  shadowPanel.classList.toggle('open');
-  floorPanel.classList.remove('open');
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-  floorPanel.classList.remove('open');
-});
-
 closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
 });
@@ -1257,17 +1337,6 @@ toggleFloorDetailsBtn.addEventListener('click', () => {
   toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
 });
 
-floorBtn.addEventListener('click', () => {
-  floorPanel.classList.toggle('open');
-  updateVirtualFloor();
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-});
-
 closeFloorBtn.addEventListener('click', () => {
   floorPanel.classList.remove('open');
   updateVirtualFloor();
@@ -1277,6 +1346,7 @@ floorShadowEnabled.addEventListener('change', () => {
   floorShadowEnabledState = floorShadowEnabled.checked;
   syncProjectedShadowRendering();
   updateVirtualFloor();
+  syncQuickToggleButtons();
 });
 
 floorY.addEventListener('input', () => {
@@ -1362,16 +1432,6 @@ async function setFloorFromDeviceTilt() {
 useDeviceTiltBtn.addEventListener('click', setFloorFromDeviceTilt);
 snapToFloorBtn.addEventListener('click', snapModelToFloor);
 
-blendBtn.addEventListener('click', () => {
-  blendPanel.classList.toggle('open');
-  floorPanel.classList.remove('open');
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-});
-
 closeBlendBtn.addEventListener('click', () => {
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
@@ -1380,6 +1440,7 @@ closeBlendBtn.addEventListener('click', () => {
 blendEnabled.addEventListener('change', () => {
   blendEnabledState = blendEnabled.checked;
   if (!blendEnabledState) resetBackgroundBlend();
+  syncQuickToggleButtons();
 });
 
 blendStrength.addEventListener('input', () => {
@@ -1390,6 +1451,7 @@ blendStrength.addEventListener('input', () => {
 shadowEnabled.addEventListener('change', () => {
   shadowEnabledState = shadowEnabled.checked;
   updateGroundShadow();
+  syncQuickToggleButtons();
 });
 
 shadowOpacity.addEventListener('input', () => {
@@ -1430,7 +1492,10 @@ resetFovBtn.addEventListener('click', () => {
   fovOut.textContent = `${DEFAULT_FOV}°`;
 });
 
-autoLight.addEventListener('change', updateLightControlState);
+autoLight.addEventListener('change', () => {
+  updateLightControlState();
+  syncQuickToggleButtons();
+});
 lightPower.addEventListener('input', () => {
   updateLightLabels();
   if (!autoLightingEnabled) setManualLighting();
@@ -1446,6 +1511,7 @@ lightElevation.addEventListener('input', () => {
 
 updateLightLabels();
 updateLightControlState();
+syncQuickToggleButtons();
 updateInputUI();
 updateShadowLabels();
 updateBlendLabel();
@@ -1679,6 +1745,7 @@ captureBtn.addEventListener('click', () => {
     fallbackSave.href = lastCaptureUrl;
     fallbackSave.style.display = 'none';
     preview.style.display = 'flex';
+    saveHelp.textContent = `保存解像度：${outW} × ${outH} px`;
     statusEl.textContent = `保存画像 ${outW}×${outH}px`;
   }, 'image/png');
 });
