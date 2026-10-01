@@ -7,10 +7,10 @@
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-title" content="カニギターカメラ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png?v=1.12.4" />
-  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png?v=1.12.4" />
-  <link rel="manifest" href="./manifest.webmanifest?v=1.12.4" />
-<title>カニギターカメラ v1.12.4</title>
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png?v=1.17.4" />
+  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png?v=1.17.4" />
+<link rel="manifest" href="./manifest.webmanifest?v=1.17.4" />
+<title>カニギターカメラ v1.17.4</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -127,7 +127,7 @@
       padding: 9px 10px;
       font-size: 13px;
     }
-    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel {
+    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel {
       display: none;
       position: absolute;
       top: calc(max(12px, env(safe-area-inset-top)) + 52px);
@@ -142,7 +142,7 @@
       -webkit-backdrop-filter: blur(12px);
       box-shadow: 0 8px 30px rgba(0,0,0,.3);
     }
-    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open { display: block; }
+    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open { display: block; }
 
     .color-grid {
       display: grid;
@@ -305,6 +305,55 @@
       text-shadow: 0 1px 3px rgba(0,0,0,.75);
       pointer-events: none;
     }
+    #floorPointMarker {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: 70%;
+      width: 42px;
+      height: 42px;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(255,255,255,.95);
+      border-radius: 50%;
+      background: rgba(0,0,0,.18);
+      box-shadow: 0 0 0 3px rgba(0,0,0,.25), inset 0 0 0 8px rgba(255,255,255,.10);
+      pointer-events: none;
+      z-index: 3;
+    }
+    #floorPointMarker::before, #floorPointMarker::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,.95);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+    }
+    #floorPointMarker::before { width: 18px; height: 2px; }
+    #floorPointMarker::after { width: 2px; height: 18px; }
+    #floorPointMarker.active { display: block; }
+    #floorPivotMarker {
+      display: none;
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 4;
+    }
+    #floorPivotMarker::before, #floorPivotMarker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      background: #ffdf4d;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 1px 3px rgba(0,0,0,.8);
+    }
+    #floorPivotMarker::before { width: 28px; height: 2px; }
+    #floorPivotMarker::after { width: 2px; height: 28px; }
+    #floorPivotMarker.visible { display: block; }
+    .floor-details { display: none; }
+    .floor-details.open { display: block; }
     .capture {
       width: 70px;
       height: 70px;
@@ -359,8 +408,12 @@
       background: white;
       color: #111;
     }
-    #fallbackSave {
+    #fallbackSave, #fallbackBackgroundSave {
       display: none;
+      background: rgba(255,255,255,.16);
+      color: white;
+    }
+    #shareBackgroundBtn {
       background: rgba(255,255,255,.16);
       color: white;
     }
@@ -416,6 +469,7 @@
         <button id="fovBtn">FOV</button>
         <button id="colorBtn">色</button>
         <button id="shadowBtn">影</button>
+        <button id="floorBtn">床</button>
         <button id="blendBtn">なじみ</button>
         <button id="resetBtn">位置を戻す</button>
       </div>
@@ -514,7 +568,7 @@
       </div>
       <div class="auto-row">
         <span>接地影を表示</span>
-        <input id="shadowEnabled" class="switch" type="checkbox" checked />
+        <input id="shadowEnabled" class="switch" type="checkbox" />
       </div>
       <div class="light-row">
         <label for="shadowOpacity">濃さ</label>
@@ -538,6 +592,59 @@
       </div>
       <p class="light-note">カニギターの向きに合わせて横幅が変わる、柔らかい接地影です。</p>
     </div>
+    <div id="floorPanel" aria-label="仮想床設定">
+      <div class="light-head">
+        <span>床</span>
+        <button id="closeFloorBtn">閉じる</button>
+      </div>
+      <div class="auto-row">
+        <span>床・投影影</span>
+        <input id="floorShadowEnabled" class="switch" type="checkbox" />
+      </div>
+      <div class="light-row">
+        <label for="floorHeight">床の高さ</label>
+        <input id="floorHeight" type="range" min="-1.2" max="1.2" step="0.01" value="0" />
+        <output id="floorHeightOut">0.00</output>
+      </div>
+      <div class="light-row">
+        <label for="floorPitch">前後回転</label>
+        <input id="floorPitch" type="range" min="-60" max="60" step="1" value="0" />
+        <output id="floorPitchOut">0°</output>
+      </div>
+      <div class="auto-row">
+        <span>床ガイド</span>
+        <input id="floorGuideEnabled" class="switch" type="checkbox" checked />
+      </div>
+      <p class="light-note">床はカニギターの足元を起点にして自動追随します。床はカニギターの移動に追随します。「床の高さ」で足元との接触位置を合わせ、必要なら前後回転を調整します。</p>
+      <div class="auto-row">
+        <span>影の調整</span>
+        <button id="toggleFloorDetailsBtn">開く</button>
+      </div>
+      <div id="floorDetails" class="floor-details">
+        <div class="light-row">
+          <label for="floorShadowOpacity">影の濃さ</label>
+          <input id="floorShadowOpacity" type="range" min="0" max="1" step="0.01" value="0.42" />
+          <output id="floorShadowOpacityOut">0.42</output>
+        </div>
+        <div class="light-row">
+          <label for="floorShadowSoftness">影のぼけ</label>
+          <input id="floorShadowSoftness" type="range" min="0" max="1" step="0.01" value="0.25" />
+          <output id="floorShadowSoftnessOut">0.25</output>
+        </div>
+      </div>
+      <div style="display:none">
+        <input id="floorY" type="range" value="-0.55" />
+        <output id="floorYOut"></output>
+        <input id="floorTilt" type="range" value="0" />
+        <output id="floorTiltOut"></output>
+        <button id="useDeviceTiltBtn"></button>
+        <button id="snapToFloorBtn"></button>
+        <input id="shadowDirection" value="-35" />
+        <output id="shadowDirectionOut"></output>
+        <input id="shadowLength" value="0.55" />
+        <output id="shadowLengthOut"></output>
+      </div>
+    </div>
     <div id="blendPanel" aria-label="背景なじみ設定">
       <div class="light-head">
         <span>背景になじませる</span>
@@ -554,6 +661,8 @@
       </div>
       <p class="light-note">背景の色味と明るさを強めに反映するテスト版です。暗い写真ではカニギターも大きく暗くなります。</p>
     </div>
+    <div id="floorPointMarker" aria-hidden="true"></div>
+    <div id="floorPivotMarker" aria-hidden="true"></div>
     <div id="hint" class="hint">
       「移動」：1本指で位置を移動<br>
       「3D回転」：1本指で向きを変更<br>
@@ -568,14 +677,16 @@
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
       <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">カニギターカメラ v1.12.4</div>
+    <div class="version-badge">カニギターカメラ v1.17.4</div>
   </div>
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-actions">
-      <button id="shareBtn">共有 / 写真に保存</button>
-      <a id="fallbackSave" download="kani-guitar-photo.png">ファイルとして保存</a>
+      <button id="shareBtn">合成写真を保存</button>
+      <button id="shareBackgroundBtn">背景写真を保存</button>
+      <a id="fallbackSave" download="kani-guitar-photo.png">合成写真をファイル保存</a>
+      <a id="fallbackBackgroundSave" download="kani-guitar-background.png">背景写真をファイル保存</a>
       <button id="closePreview">閉じる</button>
     </div>
     <p id="saveHelp">保存画像は長辺約3000px。カニギターは高解像度でレンダリングして縮小し、輪郭をなめらかにしています。</p>
@@ -584,7 +695,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">カニギターカメラ v1.12.4</div>
+      <div class="start-version">カニギターカメラ v1.17.4</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
@@ -601,6 +712,6 @@
     }
   }
   </script>
-  <script type="module" src="./main.js?v=1.12.4"></script>
+  <script type="module" src="./main.js?v=1.17.4"></script>
 </body>
 </html>
