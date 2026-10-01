@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.20 beta</title>
+<title>カニギター カメラ v1.20.21 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -605,25 +605,66 @@
     }
     #startCard h1 { margin: 0 0 10px; font-size: 28px; }
 
-    /* iPhone Camera-style landscape behavior:
-       keep every control container at its normal screen position and rotate
-       only the text/icon content inside it. */
+    /* Landscape-left: portrait UI rotated with the physical phone.
+       Top settings become the left rail; bottom capture controls become right rail. */
     @media (orientation: landscape) {
-      .top-actions > button,
-      #flipBtn,
+      .topbar {
+        top: 12px;
+        bottom: 12px;
+        left: max(4px, calc(env(safe-area-inset-left) - 10px));
+        right: auto;
+        width: auto;
+        height: auto;
+        align-items: stretch;
+      }
+      .top-actions {
+        width: auto;
+        height: 100%;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px;
+      }
+      .top-actions > button {
+        transform: rotate(90deg);
+        transform-origin: center;
+      }
+
+      .controls {
+        left: auto;
+        right: max(18px, env(safe-area-inset-right));
+        top: 50%;
+        bottom: auto;
+        transform: translateY(-50%);
+      }
+      .controls > * {
+        transform: rotate(90deg);
+        transform-origin: center;
+      }
+
+      .mode-switch {
+        left: auto;
+        right: calc(max(18px, env(safe-area-inset-right)) + 86px);
+        top: 50%;
+        bottom: auto;
+        transform: translateY(-50%) rotate(90deg);
+        transform-origin: center;
+      }
+
+      #flipBtn {
+        left: auto;
+        right: max(20px, env(safe-area-inset-right));
+        bottom: auto;
+        top: 14px;
+        transform: rotate(90deg);
+      }
       #resetBtn {
-        transform: none !important;
+        left: auto;
+        right: max(20px, env(safe-area-inset-right));
+        bottom: 14px;
+        transform: rotate(90deg);
       }
 
-      .top-actions > button,
-      #flipBtn,
-      #resetBtn,
-      .mode-switch > button {
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-      }
-
-      /* Keep menu/panel boxes in place. Rotate their content as a group. */
       #morePanel,
       #lightPanel,
       #fovPanel,
@@ -633,20 +674,11 @@
       #blendPanel,
       #floorPanel,
       #savePanel {
-        transform: none !important;
-      }
-
-      #morePanel > *,
-      #lightPanel > *,
-      #fovPanel > *,
-      #colorPanel > *,
-      #inputPanel > *,
-      #shadowPanel > *,
-      #blendPanel > *,
-      #floorPanel > *,
-      #savePanel > * {
-        transform: rotate(90deg);
-        transform-origin: center;
+        top: 12px;
+        right: auto;
+        left: 74px;
+        transform: rotate(90deg) translateY(-100%);
+        transform-origin: top left;
       }
     }
   </style>
@@ -675,7 +707,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.20 beta</div>
+      <div class="menu-version">Kani Camera v1.20.21 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -911,7 +943,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.20 beta</div>
+      <div class="start-version">Kani Camera v1.20.21 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
