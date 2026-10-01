@@ -45,6 +45,12 @@ const shadowOpacityOut = document.getElementById('shadowOpacityOut');
 const shadowBlurOut = document.getElementById('shadowBlurOut');
 const shadowSizeOut = document.getElementById('shadowSizeOut');
 const shadowOffsetOut = document.getElementById('shadowOffsetOut');
+const blendBtn = document.getElementById('blendBtn');
+const blendPanel = document.getElementById('blendPanel');
+const closeBlendBtn = document.getElementById('closeBlendBtn');
+const blendEnabled = document.getElementById('blendEnabled');
+const blendStrength = document.getElementById('blendStrength');
+const blendStrengthOut = document.getElementById('blendStrengthOut');
 const autoLight = document.getElementById('autoLight');
 const lightPower = document.getElementById('lightPower');
 const lightPowerOut = document.getElementById('lightPowerOut');
@@ -206,6 +212,9 @@ lightSampleCanvas.height = 24;
 const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: true });
 let lastLightSample = 0;
 let autoLightingEnabled = true;
+let blendEnabledState = true;
+let blendStrengthState = 0.35;
+const blendTint = new THREE.Color(1, 1, 1);
 
 const neutralWhite = new THREE.Color(1, 1, 1);
 const sampledColor = new THREE.Color(1, 1, 1);
@@ -252,9 +261,47 @@ function updateLightControlState() {
   if (!autoLightingEnabled) setManualLighting();
 }
 
+function updateBlendLabel() {
+  blendStrengthOut.textContent = blendStrengthState.toFixed(2);
+}
+
+function applyBackgroundBlend(avgR, avgG, avgB, avgLum) {
+  if (!model) return;
+  if (!blendEnabledState) {
+    blendTint.setRGB(1, 1, 1);
+  } else {
+    const safeLum = Math.max(0.08, avgLum);
+    const nr = THREE.MathUtils.clamp(avgR / safeLum, 0.72, 1.28);
+    const ng = THREE.MathUtils.clamp(avgG / safeLum, 0.72, 1.28);
+    const nb = THREE.MathUtils.clamp(avgB / safeLum, 0.72, 1.28);
+    const strength = blendStrengthState * 0.55;
+    blendTint.setRGB(
+      THREE.MathUtils.lerp(1, nr, strength),
+      THREE.MathUtils.lerp(1, ng, strength),
+      THREE.MathUtils.lerp(1, nb, strength)
+    );
+  }
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) if (mat.isMeshStandardMaterial) mat.color.copy(blendTint);
+  });
+}
+
+function resetBackgroundBlend() {
+  blendTint.setRGB(1, 1, 1);
+  if (!model) return;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) if (mat.isMeshStandardMaterial) mat.color.setRGB(1, 1, 1);
+  });
+}
+
 function updateAdaptiveLighting(now) {
   const source = getActiveBackgroundSource();
-  if (!autoLightingEnabled || !source) return;
+  if (!source) return;
+  if (!autoLightingEnabled && !blendEnabledState) return;
   if (now - lastLightSample < 400) return;
   lastLightSample = now;
 
@@ -288,28 +335,31 @@ function updateAdaptiveLighting(now) {
   r /= count; g /= count; b /= count;
   const avgLum = lumSum / count;
 
+  applyBackgroundBlend(r, g, b, avgLum);
   sampledColor.setRGB(r, g, b);
-  // Mostly white, gently tinted by the environment so skin/paint colors do not go wild.
-  targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.32);
-  key.color.lerp(targetLightColor, 0.35);
-  fill.color.lerp(targetLightColor, 0.22);
-  hemi.color.lerp(targetLightColor, 0.18);
-
-  // Map scene brightness to a restrained lighting range.
-  const autoPower = THREE.MathUtils.clamp(1.15 + avgLum * 2.35, 1.25, 3.15);
-  key.intensity += (autoPower - key.intensity) * 0.28;
-  fill.intensity += (autoPower * 0.38 - fill.intensity) * 0.22;
-  hemi.intensity += (1.25 + avgLum * 0.75 - hemi.intensity) * 0.20;
-
-  if (brightWeight > 0.001) {
-    const nx = THREE.MathUtils.clamp(brightX / brightWeight, -1, 1);
-    const ny = THREE.MathUtils.clamp(brightY / brightWeight, -1, 1);
-    const desired = new THREE.Vector3(nx * 4.0, ny * 3.0 + 1.0, 4.0).normalize().multiplyScalar(5);
-    key.position.lerp(desired, 0.22);
+  if (autoLightingEnabled) {
+    // Mostly white, gently tinted by the environment so skin/paint colors do not go wild.
+    targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.32);
+    key.color.lerp(targetLightColor, 0.35);
+    fill.color.lerp(targetLightColor, 0.22);
+    hemi.color.lerp(targetLightColor, 0.18);
+  
+    // Map scene brightness to a restrained lighting range.
+    const autoPower = THREE.MathUtils.clamp(1.15 + avgLum * 2.35, 1.25, 3.15);
+    key.intensity += (autoPower - key.intensity) * 0.28;
+    fill.intensity += (autoPower * 0.38 - fill.intensity) * 0.22;
+    hemi.intensity += (1.25 + avgLum * 0.75 - hemi.intensity) * 0.20;
+  
+    if (brightWeight > 0.001) {
+      const nx = THREE.MathUtils.clamp(brightX / brightWeight, -1, 1);
+      const ny = THREE.MathUtils.clamp(brightY / brightWeight, -1, 1);
+      const desired = new THREE.Vector3(nx * 4.0, ny * 3.0 + 1.0, 4.0).normalize().multiplyScalar(5);
+      key.position.lerp(desired, 0.22);
+    }
+  
+    lightPower.value = key.intensity.toFixed(2);
+    lightPowerOut.textContent = key.intensity.toFixed(2);
   }
-
-  lightPower.value = key.intensity.toFixed(2);
-  lightPowerOut.textContent = key.intensity.toFixed(2);
 }
 
 
@@ -362,6 +412,7 @@ function closeTopPanels() {
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -610,7 +661,8 @@ loader.load(
         metalness: METALNESS_GAIN,
         roughness: 1.0,
         envMap: liveEnvMap,
-        envMapIntensity: ENV_REFLECTION_INTENSITY
+        envMapIntensity: ENV_REFLECTION_INTENSITY,
+        color: blendTint
       });
 
       child.material = pbrMaterial;
@@ -722,6 +774,7 @@ inputBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 });
 
 closeInputBtn.addEventListener('click', () => {
@@ -742,6 +795,7 @@ lightBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 });
 
 closeLightBtn.addEventListener('click', () => {
@@ -754,6 +808,7 @@ fovBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
   colorPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 });
 
 closeFovBtn.addEventListener('click', () => {
@@ -766,6 +821,7 @@ colorBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   shadowPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 });
 
 closeColorBtn.addEventListener('click', () => {
@@ -784,10 +840,34 @@ shadowBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
   fovPanel.classList.remove('open');
   colorPanel.classList.remove('open');
+  blendPanel.classList.remove('open');
 });
 
 closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
+});
+
+blendBtn.addEventListener('click', () => {
+  blendPanel.classList.toggle('open');
+  inputPanel.classList.remove('open');
+  lightPanel.classList.remove('open');
+  fovPanel.classList.remove('open');
+  colorPanel.classList.remove('open');
+  shadowPanel.classList.remove('open');
+});
+
+closeBlendBtn.addEventListener('click', () => {
+  blendPanel.classList.remove('open');
+});
+
+blendEnabled.addEventListener('change', () => {
+  blendEnabledState = blendEnabled.checked;
+  if (!blendEnabledState) resetBackgroundBlend();
+});
+
+blendStrength.addEventListener('input', () => {
+  blendStrengthState = Number(blendStrength.value);
+  updateBlendLabel();
 });
 
 shadowEnabled.addEventListener('change', () => {
@@ -851,6 +931,7 @@ updateLightLabels();
 updateLightControlState();
 updateInputUI();
 updateShadowLabels();
+updateBlendLabel();
 ensureGroundShadow();
 updateGroundShadow();
 
