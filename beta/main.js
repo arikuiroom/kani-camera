@@ -1183,15 +1183,81 @@ pickPhotoBtn.addEventListener('click', () => {
   photoPicker.click();
 });
 
-lightBtn.addEventListener('click', () => {
-  lightPanel.classList.toggle('open');
-  inputPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-  floorPanel.classList.remove('open');
+function closeAdjustmentPanels(except = null) {
+  [inputPanel, fovPanel, colorPanel, lightPanel, shadowPanel, blendPanel, floorPanel, morePanel]
+    .forEach((panel) => {
+      if (panel !== except) panel.classList.remove('open');
+    });
+}
+
+function syncQuickToggleButtons() {
+  blendBtn.classList.toggle('active', blendEnabled.checked);
+  lightBtn.classList.toggle('active', autoLight.checked);
+  shadowBtn.classList.toggle('active', shadowEnabled.checked);
+  floorBtn.classList.toggle('active', floorShadowEnabled.checked);
+}
+
+function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
+  const HOLD_MS = 520;
+  let holdTimer = null;
+  let longPressed = false;
+
+  button.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    longPressed = false;
+    holdTimer = setTimeout(() => {
+      longPressed = true;
+      closeAdjustmentPanels(panel);
+      panel.classList.add('open');
+      if (afterOpen) afterOpen();
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, HOLD_MS);
+  });
+
+  const finish = () => {
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = null;
+  };
+  button.addEventListener('pointerup', finish);
+  button.addEventListener('pointercancel', finish);
+  button.addEventListener('pointerleave', finish);
+
+  button.addEventListener('click', (e) => {
+    if (longPressed) {
+      e.preventDefault();
+      longPressed = false;
+      return;
+    }
+    toggleAction();
+    syncQuickToggleButtons();
+  });
+
+  button.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+installTapHoldControl(lightBtn, lightPanel, () => {
+  autoLight.checked = !autoLight.checked;
+  updateLightControlState();
 });
+
+installTapHoldControl(blendBtn, blendPanel, () => {
+  blendEnabled.checked = !blendEnabled.checked;
+  blendEnabledState = blendEnabled.checked;
+  if (!blendEnabledState) resetBackgroundBlend();
+});
+
+installTapHoldControl(shadowBtn, shadowPanel, () => {
+  shadowEnabled.checked = !shadowEnabled.checked;
+  shadowEnabledState = shadowEnabled.checked;
+  updateGroundShadow();
+});
+
+installTapHoldControl(floorBtn, floorPanel, () => {
+  floorShadowEnabled.checked = !floorShadowEnabled.checked;
+  floorShadowEnabledState = floorShadowEnabled.checked;
+  syncProjectedShadowRendering();
+  updateVirtualFloor();
+}, updateVirtualFloor);
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
@@ -1231,17 +1297,6 @@ colorChoices.forEach((btn) => {
   });
 });
 
-shadowBtn.addEventListener('click', () => {
-  shadowPanel.classList.toggle('open');
-  floorPanel.classList.remove('open');
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-  floorPanel.classList.remove('open');
-});
-
 closeShadowBtn.addEventListener('click', () => {
   shadowPanel.classList.remove('open');
 });
@@ -1274,17 +1329,6 @@ toggleFloorDetailsBtn.addEventListener('click', () => {
   toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
 });
 
-floorBtn.addEventListener('click', () => {
-  floorPanel.classList.toggle('open');
-  updateVirtualFloor();
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-  blendPanel.classList.remove('open');
-});
-
 closeFloorBtn.addEventListener('click', () => {
   floorPanel.classList.remove('open');
   updateVirtualFloor();
@@ -1294,6 +1338,7 @@ floorShadowEnabled.addEventListener('change', () => {
   floorShadowEnabledState = floorShadowEnabled.checked;
   syncProjectedShadowRendering();
   updateVirtualFloor();
+  syncQuickToggleButtons();
 });
 
 floorY.addEventListener('input', () => {
@@ -1379,16 +1424,6 @@ async function setFloorFromDeviceTilt() {
 useDeviceTiltBtn.addEventListener('click', setFloorFromDeviceTilt);
 snapToFloorBtn.addEventListener('click', snapModelToFloor);
 
-blendBtn.addEventListener('click', () => {
-  blendPanel.classList.toggle('open');
-  floorPanel.classList.remove('open');
-  inputPanel.classList.remove('open');
-  lightPanel.classList.remove('open');
-  fovPanel.classList.remove('open');
-  colorPanel.classList.remove('open');
-  shadowPanel.classList.remove('open');
-});
-
 closeBlendBtn.addEventListener('click', () => {
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
@@ -1397,6 +1432,7 @@ closeBlendBtn.addEventListener('click', () => {
 blendEnabled.addEventListener('change', () => {
   blendEnabledState = blendEnabled.checked;
   if (!blendEnabledState) resetBackgroundBlend();
+  syncQuickToggleButtons();
 });
 
 blendStrength.addEventListener('input', () => {
@@ -1407,6 +1443,7 @@ blendStrength.addEventListener('input', () => {
 shadowEnabled.addEventListener('change', () => {
   shadowEnabledState = shadowEnabled.checked;
   updateGroundShadow();
+  syncQuickToggleButtons();
 });
 
 shadowOpacity.addEventListener('input', () => {
@@ -1447,7 +1484,10 @@ resetFovBtn.addEventListener('click', () => {
   fovOut.textContent = `${DEFAULT_FOV}°`;
 });
 
-autoLight.addEventListener('change', updateLightControlState);
+autoLight.addEventListener('change', () => {
+  updateLightControlState();
+  syncQuickToggleButtons();
+});
 lightPower.addEventListener('input', () => {
   updateLightLabels();
   if (!autoLightingEnabled) setManualLighting();
@@ -1463,6 +1503,7 @@ lightElevation.addEventListener('input', () => {
 
 updateLightLabels();
 updateLightControlState();
+syncQuickToggleButtons();
 updateInputUI();
 updateShadowLabels();
 updateBlendLabel();
