@@ -117,8 +117,8 @@ const DEFAULT_FOV = 42;
 // Fixed 16:9 4K UHD capture. Portrait uses the rotated equivalent.
 const CAPTURE_LONG_EDGE = 3840;
 const CAPTURE_SHORT_EDGE = 2160;
-const CAPTURE_SUPERSAMPLE = 2;
-const CAPTURE_RENDER_EDGE_CAP = 7680;
+const CAPTURE_SUPERSAMPLE = 1;
+const CAPTURE_RENDER_EDGE_CAP = 3840;
 
 function getCaptureViewport() {
   const screenW = innerWidth;
