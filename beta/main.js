@@ -189,6 +189,14 @@ let floorOffsetY = 0;
 let modelFootOffsetY = -0.55;
 let suppressFloorGuideForCapture = false;
 
+function syncProjectedShadowRendering() {
+  // The expensive shadow-map pass is only useful when the projected floor
+  // shadow is visible. Keeping the feature OFF now skips that GPU pass too.
+  renderer.shadowMap.autoUpdate = floorShadowEnabledState;
+  if (floorShadowEnabledState) renderer.shadowMap.needsUpdate = true;
+}
+syncProjectedShadowRendering();
+
 function ensureVirtualFloor() {
   if (floorPivot) return;
 
@@ -241,6 +249,14 @@ function updateFloorPivotMarker() {
 }
 
 function updateVirtualFloor() {
+  const floorUIActive = floorPanel.classList.contains('open');
+  if (!floorShadowEnabledState && !floorUIActive) {
+    if (virtualFloor) virtualFloor.visible = false;
+    if (floorGuide) floorGuide.visible = false;
+    floorPivotMarker.classList.remove('visible');
+    return;
+  }
+
   ensureVirtualFloor();
 
   // Pivot follows the crab-guitar foot point. Height is applied to the pivot
@@ -441,10 +457,13 @@ function ensureGroundShadow() {
 }
 
 function updateGroundShadow() {
-  const shadow = ensureGroundShadow();
   const visible = !!model && modelVisible && shadowEnabledState;
-  shadow.visible = visible;
-  if (!visible) return;
+  if (!visible) {
+    if (groundShadow) groundShadow.visible = false;
+    return;
+  }
+  const shadow = ensureGroundShadow();
+  shadow.visible = true;
 
   const scaleFactor = model.scale.x / initialModelScale;
 
@@ -854,7 +873,7 @@ function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 500) return; // power-saving: about 2 updates/sec
+  if (now - lastEnvUpdate < 1000) return; // power-saving: about 1 update/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
@@ -1035,8 +1054,12 @@ function render(now = 0) {
 
   updateLiveEnvironment(now);
   updateAdaptiveLighting(now);
-  updateGroundShadow();
-  updateVirtualFloor();
+
+  // Shadow systems are normally off. Avoid their per-frame transforms and
+  // model bounds traversal unless the user is actually using them.
+  if (shadowEnabledState || groundShadow) updateGroundShadow();
+  if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
+
   renderer.render(scene, camera);
 }
 requestAnimationFrame(render);
@@ -1238,6 +1261,7 @@ closeFloorBtn.addEventListener('click', () => {
 
 floorShadowEnabled.addEventListener('change', () => {
   floorShadowEnabledState = floorShadowEnabled.checked;
+  syncProjectedShadowRendering();
   updateVirtualFloor();
 });
 
