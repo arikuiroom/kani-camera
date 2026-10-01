@@ -53,6 +53,7 @@ const floorY = document.getElementById('floorY');
 const floorYOut = document.getElementById('floorYOut');
 const floorTilt = document.getElementById('floorTilt');
 const floorTiltOut = document.getElementById('floorTiltOut');
+const useDeviceTiltBtn = document.getElementById('useDeviceTiltBtn');
 const floorShadowOpacity = document.getElementById('floorShadowOpacity');
 const floorShadowOpacityOut = document.getElementById('floorShadowOpacityOut');
 const floorShadowSoftness = document.getElementById('floorShadowSoftness');
@@ -123,7 +124,10 @@ renderer.toneMappingExposure = 1.08;
 // PCF soft shadows are light enough for live iPhone preview and are also
 // included in the high-resolution capture pass.
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// VSM gives us a genuinely adjustable blur radius. PCFSoftShadowMap ignores
+// the radius control on WebGLRenderer, which is why v1.13.0's blur slider
+// appeared to do nothing.
+renderer.shadowMap.type = THREE.VSMShadowMap;
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x666666, 1.75);
 scene.add(hemi);
@@ -196,7 +200,8 @@ function updateVirtualFloor() {
   floorGuide.position.copy(virtualFloor.position);
   floorGuide.rotation.copy(virtualFloor.rotation);
   floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
-  key.shadow.radius = 1 + floorShadowSoftnessState * 7;
+  key.shadow.radius = 1 + floorShadowSoftnessState * 18;
+  key.shadow.blurSamples = Math.round(4 + floorShadowSoftnessState * 20);
 }
 
 function updateFloorLabels() {
@@ -1012,6 +1017,58 @@ floorGuideEnabled.addEventListener('change', () => {
   updateVirtualFloor();
 });
 
+async function setFloorFromDeviceTilt() {
+  try {
+    // iOS requires motion/orientation permission from a direct user gesture.
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') {
+        statusEl.textContent = '傾きセンサーの許可が必要です';
+        return;
+      }
+    }
+
+    useDeviceTiltBtn.disabled = true;
+    useDeviceTiltBtn.textContent = 'iPhoneを静止…';
+    statusEl.textContent = 'iPhoneの傾きを測定中…';
+
+    const samples = [];
+    const onOrientation = (event) => {
+      if (typeof event.beta !== 'number') return;
+      // Portrait: beta is approximately 90° when the screen is vertical and
+      // 0° when the phone lies flat. Convert that to our floor pitch.
+      samples.push(event.beta);
+    };
+    window.addEventListener('deviceorientation', onOrientation);
+
+    await new Promise(resolve => setTimeout(resolve, 650));
+    window.removeEventListener('deviceorientation', onOrientation);
+
+    if (!samples.length) {
+      statusEl.textContent = '傾きを取得できませんでした';
+      return;
+    }
+
+    const beta = samples.reduce((a, b) => a + b, 0) / samples.length;
+    // Camera optical axis follows the phone. A level real floor's apparent
+    // pitch is approximated from the device pitch. Clamp to the UI's useful range.
+    const estimatedTilt = THREE.MathUtils.clamp(90 - Math.abs(beta), -60, 60);
+    floorTiltState = estimatedTilt;
+    floorTilt.value = String(Math.round(estimatedTilt));
+    updateFloorLabels();
+    updateVirtualFloor();
+    statusEl.textContent = `床の傾きを自動設定：${Math.round(estimatedTilt)}°`;
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '傾きセンサーを利用できません';
+  } finally {
+    useDeviceTiltBtn.disabled = false;
+    useDeviceTiltBtn.textContent = '水平を自動設定';
+  }
+}
+
+useDeviceTiltBtn.addEventListener('click', setFloorFromDeviceTilt);
 snapToFloorBtn.addEventListener('click', snapModelToFloor);
 
 blendBtn.addEventListener('click', () => {
