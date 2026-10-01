@@ -7,10 +7,10 @@
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-title" content="カニギターカメラ" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png?v=1.17.4" />
-  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png?v=1.17.4" />
-<link rel="manifest" href="./manifest.webmanifest?v=1.17.4" />
-<title>カニギターカメラ v1.17.4</title>
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png?v=1.18.6" />
+  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png?v=1.18.6" />
+  <link rel="manifest" href="./manifest.webmanifest?v=1.18.6" />
+<title>カニギター カメラ v1.18.6</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -49,6 +49,9 @@
       inset: 0;
       z-index: 2;
       pointer-events: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
     .topbar {
       position: absolute;
@@ -71,7 +74,7 @@
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 2px 12px rgba(0,0,0,.2);
     }
-    .status { pointer-events: none; }
+    .status { display: none !important; pointer-events: none; }
     .start-version {
       margin-top: -4px;
       margin-bottom: 12px;
@@ -123,9 +126,91 @@
       flex-wrap: wrap;
       justify-content: flex-end;
     }
+    .top-actions {
+      width: 100%;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      gap: 4px;
+    }
     .top-actions button {
-      padding: 9px 10px;
+      padding: 9px 9px;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+    .status {
+      position: fixed;
+      left: 50%;
+      bottom: max(2px, env(safe-area-inset-bottom));
+      top: auto;
+      transform: translateX(-50%);
+      width: calc(100vw - 140px);
+      max-width: none;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      font-size: 14px;
+      line-height: 1.2;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 1px 3px rgba(0,0,0,.9);
+    }
+    .top-actions button.quick-toggle.active {
+      background: #0a84ff;
+      color: white;
+    }
+    #morePanel {
+      display: none;
+      position: absolute;
+      top: calc(max(12px, env(safe-area-inset-top)) + 52px);
+      right: 12px;
+      width: min(290px, calc(100vw - 24px));
+      padding: 8px;
+      border-radius: 16px;
+      background: rgba(12,12,12,.24);
+      color: white;
+      pointer-events: auto;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 6px 24px rgba(0,0,0,.10);
+    }
+    #morePanel.open { display: grid; gap: 6px; }
+    #morePanel button {
+      width: 100%;
+      text-align: left;
+      box-shadow: none;
+      background: rgba(255,255,255,.08);
+      font-size: 18px;
+      white-space: nowrap;
+    }
+    .menu-version {
+      padding: 7px 10px 2px;
+      text-align: center;
       font-size: 13px;
+      color: rgba(255,255,255,.72);
+      pointer-events: none;
+    }
+    .panel-head-actions { display:flex; align-items:center; gap:8px; }
+    .panel-close { padding: 7px 11px; font-size: 20px; line-height: 1; }
+    #resetBtn {
+      position: absolute;
+      right: 14px;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      width: 58px;
+      height: 58px;
+      padding: 0;
+      font-size: 15px;
+      display: grid;
+      place-items: center;
+    }
+    #flipBtn {
+      position: absolute;
+      left: 14px;
+      bottom: max(20px, env(safe-area-inset-bottom));
     }
     #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel {
       display: none;
@@ -135,12 +220,12 @@
       width: min(310px, calc(100vw - 24px));
       padding: 14px;
       border-radius: 18px;
-      background: rgba(12,12,12,.78);
+      background: rgba(12,12,12,.24);
       color: white;
       pointer-events: auto;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 8px 30px rgba(0,0,0,.3);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
     #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open { display: block; }
 
@@ -220,17 +305,36 @@
       background: rgba(0,0,0,.08);
     }
     #startCard .start-actions {
-      display: grid;
-      gap: 10px;
-      margin-top: 14px;
+      margin-top: 20px;
     }
-    #startCard .start-actions button {
+    #startCard .start-primary-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    #startCard .start-primary-actions button {
       width: 100%;
-      font-size: 17px;
-      padding: 14px 22px;
+      aspect-ratio: 1 / 1;
+      border-radius: 22px;
+      padding: 14px;
+      font-size: 18px;
       font-weight: 700;
     }
+    #startCamera {
+      background: white;
+      color: #111;
+    }
     #startPhoto {
+      background: rgba(255,255,255,.14);
+      color: white;
+    }
+    #forceLatestBtn {
+      width: 100%;
+      margin-top: 30px;
+      border-radius: 16px;
+      font-size: 14px !important;
+      padding: 12px 18px !important;
+      opacity: .82;
       background: rgba(255,255,255,.14);
       color: white;
     }
@@ -240,6 +344,7 @@
 
     .light-head {
       display: flex;
+      font-size: 19px;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 10px;
@@ -251,7 +356,7 @@
       gap: 8px;
       align-items: center;
       margin: 9px 0;
-      font-size: 13px;
+      font-size: 18px;
     }
     .light-row input[type="range"] { width: 100%; pointer-events: auto; touch-action: pan-x; }
     .light-row output {
@@ -265,7 +370,7 @@
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 10px;
-      font-size: 14px;
+      font-size: 19px;
     }
     .switch {
       appearance: none;
@@ -287,7 +392,7 @@
       background: white;
       transition: .18s;
     }
-    .switch:checked { background: rgba(255,255,255,.75); }
+    .switch:checked { background: #0a84ff; }
     .switch:checked::after { transform: translateX(20px); }
     .light-note {
       margin: 8px 0 0;
@@ -443,15 +548,7 @@
       color: white;
       text-align: center;
     }
-    #startCard h1 { margin: 0 0 10px; font-size: 24px; }
-    #startCard p { margin: 0 0 18px; line-height: 1.6; opacity: .88; }
-    #startCamera {
-      font-size: 17px;
-      padding: 14px 22px;
-      background: white;
-      color: #111;
-      font-weight: 700;
-    }
+    #startCard h1 { margin: 0 0 10px; font-size: 28px; }
   </style>
 </head>
 <body>
@@ -464,21 +561,26 @@
     <div class="topbar">
       <div id="status" class="pill status">モデル読み込み中…</div>
       <div class="top-actions">
-        <button id="inputBtn">入力</button>
-        <button id="lightBtn">照明</button>
-        <button id="fovBtn">FOV</button>
-        <button id="colorBtn">色</button>
-        <button id="shadowBtn">影</button>
-        <button id="floorBtn">床</button>
-        <button id="blendBtn">なじみ</button>
-        <button id="resetBtn">位置を戻す</button>
+        <button id="fovBtn">パース</button>
+        <button id="blendBtn" class="quick-toggle active" aria-label="タップでON/OFF、長押しで調整">なじみ</button>
+        <button id="lightBtn" class="quick-toggle" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
+        <button id="shadowBtn" class="quick-toggle" aria-label="タップでON/OFF、長押しで調整">丸影</button>
+        <button id="floorBtn" class="quick-toggle" aria-label="タップでON/OFF、長押しで調整">床</button>
+        <button id="moreBtn" aria-label="その他のメニュー">•••</button>
       </div>
+    </div>
+    <div id="morePanel" aria-label="その他のメニュー">
+      <button id="inputBtn">入力（カメラ・写真）</button>
+      <button id="colorBtn">カニギターの色</button>
+      <button id="hideBtn">カニギターを隠す</button>
+      <button id="reloadLatestBtn">最新版を再読み込み</button>
+      <div class="menu-version">カニギターカメラ v1.18.6</div>
     </div>
     
     <div id="inputPanel" aria-label="入力設定">
       <div class="light-head">
         <span>入力</span>
-        <button id="closeInputBtn">閉じる</button>
+        <button id="closeInputBtn" class="panel-close" aria-label="閉じる">×</button>
       </div>
       <div class="source-grid">
         <button id="switchCameraBtn" class="source-choice active">
@@ -500,11 +602,11 @@
     <div id="lightPanel" aria-label="照明設定">
       <div class="light-head">
         <span>照明</span>
-        <button id="closeLightBtn">閉じる</button>
-      </div>
-      <div class="auto-row">
-        <span>AUTO（周囲に合わせる）</span>
-        <input id="autoLight" class="switch" type="checkbox" checked />
+        <div class="panel-head-actions">
+          <span>AUTO</span>
+          <input id="autoLight" class="switch" type="checkbox" />
+          <button id="closeLightBtn" class="panel-close" aria-label="閉じる">×</button>
+        </div>
       </div>
       <div class="light-row">
         <label for="lightPower">明るさ</label>
@@ -521,15 +623,15 @@
         <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" />
         <output id="lightElevationOut">31°</output>
       </div>
-      <p id="lightNote" class="light-note">AUTO中は、カメラ映像の平均色・明るさ・明るい方向を照明に反映します。</p>
+      <p id="lightNote" class="light-note" style="display:none"></p>
     </div>
     <div id="fovPanel" aria-label="FOV設定">
       <div class="light-head">
-        <span>FOV</span>
-        <button id="closeFovBtn">閉じる</button>
+        <span>パース</span>
+        <button id="closeFovBtn" class="panel-close" aria-label="閉じる">×</button>
       </div>
       <div class="light-row">
-        <label for="fovRange">FOV</label>
+        <label for="fovRange">パース</label>
         <input id="fovRange" type="range" min="20" max="80" step="1" value="42" />
         <output id="fovOut">42°</output>
       </div>
@@ -540,8 +642,8 @@
     </div>
     <div id="colorPanel" aria-label="カラー設定">
       <div class="light-head">
-        <span>カラー</span>
-        <button id="closeColorBtn">閉じる</button>
+        <span>カニギターの色</span>
+        <button id="closeColorBtn" class="panel-close" aria-label="閉じる">×</button>
       </div>
       <div class="color-grid">
         <button class="color-choice active" data-color="red">
@@ -563,12 +665,11 @@
     </div>
     <div id="shadowPanel" aria-label="影設定">
       <div class="light-head">
-        <span>影</span>
-        <button id="closeShadowBtn">閉じる</button>
-      </div>
-      <div class="auto-row">
-        <span>接地影を表示</span>
-        <input id="shadowEnabled" class="switch" type="checkbox" />
+        <span>丸影</span>
+        <div class="panel-head-actions">
+          <input id="shadowEnabled" class="switch" type="checkbox" />
+          <button id="closeShadowBtn" class="panel-close" aria-label="閉じる">×</button>
+        </div>
       </div>
       <div class="light-row">
         <label for="shadowOpacity">濃さ</label>
@@ -590,16 +691,15 @@
         <input id="shadowOffset" type="range" min="-1.2" max="0.4" step="0.01" value="-0.18" />
         <output id="shadowOffsetOut">-0.18</output>
       </div>
-      <p class="light-note">カニギターの向きに合わせて横幅が変わる、柔らかい接地影です。</p>
+
     </div>
     <div id="floorPanel" aria-label="仮想床設定">
       <div class="light-head">
         <span>床</span>
-        <button id="closeFloorBtn">閉じる</button>
-      </div>
-      <div class="auto-row">
-        <span>床・投影影</span>
-        <input id="floorShadowEnabled" class="switch" type="checkbox" />
+        <div class="panel-head-actions">
+          <input id="floorShadowEnabled" class="switch" type="checkbox" />
+          <button id="closeFloorBtn" class="panel-close" aria-label="閉じる">×</button>
+        </div>
       </div>
       <div class="light-row">
         <label for="floorHeight">床の高さ</label>
@@ -615,7 +715,7 @@
         <span>床ガイド</span>
         <input id="floorGuideEnabled" class="switch" type="checkbox" checked />
       </div>
-      <p class="light-note">床はカニギターの足元を起点にして自動追随します。床はカニギターの移動に追随します。「床の高さ」で足元との接触位置を合わせ、必要なら前後回転を調整します。</p>
+
       <div class="auto-row">
         <span>影の調整</span>
         <button id="toggleFloorDetailsBtn">開く</button>
@@ -647,19 +747,18 @@
     </div>
     <div id="blendPanel" aria-label="背景なじみ設定">
       <div class="light-head">
-        <span>背景になじませる</span>
-        <button id="closeBlendBtn">閉じる</button>
-      </div>
-      <div class="auto-row">
-        <span>背景色を反映</span>
-        <input id="blendEnabled" class="switch" type="checkbox" checked />
+        <span>なじみ</span>
+        <div class="panel-head-actions">
+          <input id="blendEnabled" class="switch" type="checkbox" checked />
+          <button id="closeBlendBtn" class="panel-close" aria-label="閉じる">×</button>
+        </div>
       </div>
       <div class="light-row">
         <label for="blendStrength">なじみ強度</label>
         <input id="blendStrength" type="range" min="0" max="1" step="0.01" value="0.75" />
         <output id="blendStrengthOut">0.75</output>
       </div>
-      <p class="light-note">背景の色味と明るさを強めに反映するテスト版です。暗い写真ではカニギターも大きく暗くなります。</p>
+
     </div>
     <div id="floorPointMarker" aria-hidden="true"></div>
     <div id="floorPivotMarker" aria-hidden="true"></div>
@@ -673,33 +772,34 @@
       <button id="rotateModeBtn">3D回転</button>
     </div>
     <div class="controls">
-      <button id="flipBtn">反転</button>
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
-      <button id="hideBtn">隠す</button>
     </div>
-    <div class="version-badge">カニギターカメラ v1.17.4</div>
+    <button id="flipBtn">カメラ切替</button>
+    <button id="resetBtn" aria-label="位置を戻す">↶<br>リセット</button>
   </div>
 
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-actions">
-      <button id="shareBtn">合成写真を保存</button>
-      <button id="shareBackgroundBtn">背景写真を保存</button>
+      <button id="shareBtn">カニギター写真を保存</button>
+      <button id="shareBackgroundBtn">背景のみ保存</button>
       <a id="fallbackSave" download="kani-guitar-photo.png">合成写真をファイル保存</a>
       <a id="fallbackBackgroundSave" download="kani-guitar-background.png">背景写真をファイル保存</a>
-      <button id="closePreview">閉じる</button>
+      <button id="closePreview" class="panel-close" aria-label="閉じる">×</button>
     </div>
-    <p id="saveHelp">保存画像は長辺約3000px。カニギターは高解像度でレンダリングして縮小し、輪郭をなめらかにしています。</p>
+    <p id="saveHelp">保存解像度：—</p>
   </div>
 
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">カニギターカメラ v1.17.4</div>
-      <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
+      <div class="start-version">カニギターカメラ v1.18.6</div>
       <div class="start-actions">
-        <button id="startCamera">カメラを開始</button>
-        <button id="startPhoto">写真を選ぶ</button>
+        <div class="start-primary-actions">
+          <button id="startCamera">カメラを開始</button>
+          <button id="startPhoto">写真を選ぶ</button>
+        </div>
+        <button id="forceLatestBtn">最新版を再読み込み</button>
       </div>
     </div>
   </div>
@@ -712,6 +812,15 @@
     }
   }
   </script>
-  <script type="module" src="./main.js?v=1.17.4"></script>
+  <script type="module" src="./main.js?v=1.18.6"></script>
+  <script>
+    const reloadLatest = () => {
+      const url = new URL(location.href);
+      url.searchParams.set('latest', Date.now().toString());
+      location.replace(url.toString());
+    };
+    document.getElementById('forceLatestBtn').addEventListener('click', reloadLatest);
+    document.getElementById('reloadLatestBtn').addEventListener('click', reloadLatest);
+  </script>
 </body>
 </html>
