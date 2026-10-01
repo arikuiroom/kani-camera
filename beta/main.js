@@ -192,7 +192,7 @@ const CAPTURE_RENDER_EDGE_CAP = 3840;
 
 function getCaptureViewport() {
   const screenW = innerWidth;
-  const screenH = innerHeight;
+  const screenH = window.visualViewport?.height || innerHeight;
   const portrait = screenH >= screenW;
   const aspect = portrait ? 9 / 16 : 16 / 9;
   let width = screenW;
