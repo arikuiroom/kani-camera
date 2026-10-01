@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.18.2 beta</title>
+<title>カニギター カメラ v1.18.3 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -51,6 +51,9 @@
       inset: 0;
       z-index: 2;
       pointer-events: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
     .topbar {
       position: absolute;
@@ -132,8 +135,8 @@
       gap: 4px;
     }
     .top-actions button {
-      padding: 9px 10px;
-      font-size: 13px;
+      padding: 9px 9px;
+      font-size: 18px;
       white-space: nowrap;
     }
     .status {
@@ -150,7 +153,7 @@
       box-shadow: none;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
-      font-size: 10px;
+      font-size: 14px;
       line-height: 1.2;
       text-align: center;
       white-space: nowrap;
@@ -183,6 +186,7 @@
       text-align: left;
       box-shadow: none;
       background: rgba(255,255,255,.08);
+      font-size: 18px;
     }
     .panel-head-actions { display:flex; align-items:center; gap:8px; }
     .panel-close { padding: 7px 11px; font-size: 20px; line-height: 1; }
@@ -193,7 +197,7 @@
       width: 58px;
       height: 58px;
       padding: 0;
-      font-size: 11px;
+      font-size: 15px;
       display: grid;
       place-items: center;
     }
@@ -320,6 +324,7 @@
 
     .light-head {
       display: flex;
+      font-size: 19px;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 10px;
@@ -331,7 +336,7 @@
       gap: 8px;
       align-items: center;
       margin: 9px 0;
-      font-size: 13px;
+      font-size: 18px;
     }
     .light-row input[type="range"] { width: 100%; pointer-events: auto; touch-action: pan-x; }
     .light-row output {
@@ -345,7 +350,7 @@
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 10px;
-      font-size: 14px;
+      font-size: 19px;
     }
     .switch {
       appearance: none;
@@ -556,6 +561,7 @@
       <button id="inputBtn">入力（カメラ・写真）</button>
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
+      <button id="reloadLatestBtn">最新版を再読み込み</button>
     </div>
     
     <div id="inputPanel" aria-label="入力設定">
@@ -757,7 +763,7 @@
     </div>
     <button id="flipBtn">カメラ切替</button>
     <button id="resetBtn" aria-label="位置を戻す">↶<br>リセット</button>
-    <div class="version-badge">Kani Camera v1.18.2 beta</div>
+    <div class="version-badge">Kani Camera v1.18.3 beta</div>
   </div>
 
   <div id="preview">
@@ -775,7 +781,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギター カメラ</h1>
-      <div class="start-version">Kani Camera v1.18.2 beta</div>
+      <div class="start-version">Kani Camera v1.18.3 beta</div>
       <p>カメラ映像や写真の上に3Dカニギターを重ねます。<br>これは床認識ではなく、画面上に重ねるシンプル版です。</p>
       <div class="start-actions">
         <button id="startCamera">カメラを開始</button>
@@ -799,11 +805,13 @@
     import(`./main.js?beta=${betaBuild}`);
   </script>
   <script>
-    document.getElementById('forceLatestBtn').addEventListener('click', () => {
+    const reloadLatest = () => {
       const url = new URL(location.href);
       url.searchParams.set('latest', Date.now().toString());
       location.replace(url.toString());
-    });
+    };
+    document.getElementById('forceLatestBtn').addEventListener('click', reloadLatest);
+    document.getElementById('reloadLatestBtn').addEventListener('click', reloadLatest);
   </script>
 </body>
 </html>
