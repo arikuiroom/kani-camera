@@ -14,7 +14,7 @@ https://arikuiroom.github.io/kani-camera/beta/
 - 正式版への反映は、ユーザーが「正式版にして」と明示したときだけ行います。
 
 現在のベース:
-Kani Camera v1.21.3 beta
+Kani Camera v1.21.4 beta
 
 
 ■ v1.11.2 beta 高解像度保存 + 高品質AA
@@ -561,4 +561,12 @@ Kani Camera v1.21.3 beta
 - 床の黄色い中心マークを「床ガイド」スイッチに連動させ、床ガイドOFF時は非表示にしました。
 - 縦長の9:16撮影viewportを最大18pxだけ上へ移動しました。上部UIとの余白を残し、ライブ表示と保存画像は同じviewportを使うためWYSIWYGを維持します。
 - 横長の撮影viewportは変更していません。
+- 正式版 v1.18.6 は変更していません。
+
+
+■ v1.21.4 beta iPhone回転時のviewport安定化
+- iPhoneを縦横に何度も回転した際、SafariのvisualViewport更新途中の高さを拾って撮影表示領域が徐々にずれる問題を修正しました。
+- resize / orientationchange / visualViewport resize を一本化し、次フレームで再計算した後、Safariの回転処理が落ち着く260ms後に最終再計算します。
+- 連続イベントはキャンセルして最後の状態だけを反映するため、回転のたびに古いviewport計算が後から上書きされるのを防ぎます。
+- 撮影範囲・保存範囲・UI配置そのものは変更していません。
 - 正式版 v1.18.6 は変更していません。
