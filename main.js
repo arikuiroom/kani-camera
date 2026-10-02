@@ -220,13 +220,19 @@ function getCaptureViewport() {
 
 function applyCaptureViewport() {
   const v = getCaptureViewport();
+  const oldAspect = camera.aspect;
+  const newAspect = v.width / v.height;
   document.documentElement.style.setProperty('--capture-left', `${v.left}px`);
   document.documentElement.style.setProperty('--capture-top', `${v.top}px`);
   document.documentElement.style.setProperty('--capture-width', `${v.width}px`);
   document.documentElement.style.setProperty('--capture-height', `${v.height}px`);
-  camera.aspect = v.width / v.height;
+  if (Math.abs(newAspect - oldAspect) > 0.001) {
+    compensateProjection(camera.fov, oldAspect, camera.fov, newAspect);
+  }
+  camera.aspect = newAspect;
   camera.updateProjectionMatrix();
   renderer.setSize(v.width, v.height, false);
+  updatePerspectiveGuide();
   return v;
 }
 
@@ -234,6 +240,96 @@ const scene = new THREE.Scene();
 const initialViewport = getCaptureViewport();
 const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, initialViewport.width / initialViewport.height, 0.01, 100);
 camera.position.set(0, 0, 5);
+
+// Projection compensation uses the model center's depth along the camera view
+// axis. This is the quantity PerspectiveCamera actually uses for magnification;
+// Euclidean camera-to-model distance is wrong when the model has been moved sideways.
+function projectionFactor(fovDeg, aspect) {
+  const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg) * 0.5);
+  const tanH = tanV * aspect;
+  return 1 / Math.min(tanV, tanH);
+}
+function modelViewDepth() {
+  if (!model) return null;
+  const viewDir = new THREE.Vector3();
+  camera.getWorldDirection(viewDir);
+  return {
+    viewDir,
+    depth: new THREE.Vector3().subVectors(model.position, camera.position).dot(viewDir)
+  };
+}
+function compensateProjection(oldFov, oldAspect, newFov, newAspect) {
+  const state = modelViewDepth();
+  if (!state || state.depth <= 0.01) return;
+  const oldFactor = projectionFactor(oldFov, oldAspect);
+  const newFactor = projectionFactor(newFov, newAspect);
+  // Apparent size is proportional to factor / depth.
+  const newDepth = state.depth * (newFactor / oldFactor);
+  model.position.addScaledVector(state.viewDir, newDepth - state.depth);
+}
+
+let perspectiveGuide = null;
+let perspectiveGuideBounds = null;
+function ensurePerspectiveGuide() {
+  if (!model || perspectiveGuide) return;
+
+  // Build the box in the model's own local coordinates. Parenting it to the
+  // model makes the guide follow every 3D rotation instead of rebuilding an
+  // axis-aligned world box on each frame.
+  model.updateMatrixWorld(true);
+  const inverseModel = model.matrixWorld.clone().invert();
+  const localBox = new THREE.Box3();
+  const tempBox = new THREE.Box3();
+  const tempPoint = new THREE.Vector3();
+  let hasBounds = false;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+    if (!child.geometry.boundingBox) return;
+    tempBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
+    for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) for (let zi = 0; zi < 2; zi++) {
+      tempPoint.set(
+        xi ? tempBox.max.x : tempBox.min.x,
+        yi ? tempBox.max.y : tempBox.min.y,
+        zi ? tempBox.max.z : tempBox.min.z
+      ).applyMatrix4(inverseModel);
+      if (!hasBounds) {
+        localBox.min.copy(tempPoint);
+        localBox.max.copy(tempPoint);
+        hasBounds = true;
+      } else {
+        localBox.expandByPoint(tempPoint);
+      }
+    }
+  });
+  if (!hasBounds) return;
+
+  perspectiveGuideBounds = localBox.clone();
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  localBox.getSize(size);
+  localBox.getCenter(center);
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const edges = new THREE.EdgesGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.78,
+    depthTest: false
+  });
+  perspectiveGuide = new THREE.LineSegments(edges, material);
+  perspectiveGuide.position.copy(center);
+  perspectiveGuide.renderOrder = 999;
+  perspectiveGuide.visible = false;
+  model.add(perspectiveGuide);
+}
+function updatePerspectiveGuide() {
+  if (!model) return;
+  ensurePerspectiveGuide();
+  if (!perspectiveGuide) return;
+  perspectiveGuide.visible = fovPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+}
+
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -368,6 +464,29 @@ function updateFloorPivotMarker() {
   floorPivotMarker.classList.add('visible');
 }
 
+// Bounds of the actual crab-guitar meshes only. The perspective guide is a
+// child of the model so it follows rotation, but must never affect floor/shadow
+// calculations.
+function getCrabGuitarWorldBox() {
+  const box = new THREE.Box3();
+  let hasBounds = false;
+  if (!model) return box;
+  model.updateMatrixWorld(true);
+  model.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+    if (!child.geometry.boundingBox) return;
+    const childBox = child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld);
+    if (!hasBounds) {
+      box.copy(childBox);
+      hasBounds = true;
+    } else {
+      box.union(childBox);
+    }
+  });
+  return box;
+}
+
 function updateVirtualFloor() {
   const floorUIActive = floorPanel.classList.contains('open');
   if (!floorShadowEnabledState && !floorUIActive) {
@@ -386,7 +505,7 @@ function updateVirtualFloor() {
   let pivotY = floorYState + floorOffsetY + floorHeightState;
   let pivotZ = 0;
   if (model) {
-    const box = new THREE.Box3().setFromObject(model);
+    const box = getCrabGuitarWorldBox();
     if (!box.isEmpty()) {
       pivotX += model.position.x;
       pivotY = box.min.y + floorHeightState + floorOffsetY;
@@ -1142,6 +1261,7 @@ loader.load(
     model.rotation.set(0.05, -0.2, -0.12);
     model.position.set(0, 0, 0);
     scene.add(model);
+    ensurePerspectiveGuide();
     updateGroundShadow();
     updateVirtualFloor();
     updateShadowFromDirectControls();
@@ -1201,6 +1321,7 @@ function render(now = 0) {
   // model bounds traversal unless the user is actually using them.
   if (shadowEnabledState || groundShadow) updateGroundShadow();
   if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
+  if (fovPanel.classList.contains('open')) updatePerspectiveGuide();
 
   renderer.render(scene, camera);
 }
@@ -1250,19 +1371,95 @@ flipBtn.addEventListener('click', async () => {
 
 resetBtn.addEventListener('click', () => {
   if (!model) return;
+
+  // Reset everything outside the Settings menu. Settings-menu items
+  // (input source, crab-guitar color/visibility, save format) are preserved.
+
+  // Crab guitar transform + interaction mode.
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
+  setInteractionMode('move');
+
+  // Perspective.
+  camera.fov = DEFAULT_FOV;
+  camera.updateProjectionMatrix();
+  fovRange.value = String(DEFAULT_FOV);
+  fovOut.textContent = `${DEFAULT_FOV}°`;
+
+  // Background matching.
+  blendEnabledState = true;
+  blendStrengthState = 0.75;
+  blendEnabled.checked = true;
+  blendStrength.value = '0.75';
+  resetBackgroundBlend();
+  updateBlendLabel();
+
+  // Lighting.
+  autoLight.checked = false;
+  autoLightingEnabled = false;
+  lightPower.value = '2.2';
+  lightAzimuth.value = '27';
+  lightElevation.value = '31';
+  updateLightLabels();
+  updateLightControlState();
+  setManualLighting();
+
+  // Round shadow.
+  shadowEnabledState = false;
+  shadowOpacityState = 0.50;
+  shadowBlurState = 0.30;
+  shadowSizeState = 0.65;
+  shadowOffsetState = -0.18;
+  shadowEnabled.checked = false;
+  shadowOpacity.value = '0.50';
+  shadowBlur.value = '0.30';
+  shadowSize.value = '0.65';
+  shadowOffset.value = '-0.18';
+  refreshShadowTexture();
+  updateShadowLabels();
+  updateGroundShadow();
+
+  // Virtual floor/projected shadow.
+  floorShadowEnabledState = false;
+  floorYState = -0.55;
+  floorTiltState = 0;
+  floorShadowOpacityState = 0.42;
+  floorShadowSoftnessState = 0.25;
+  floorGuideEnabledState = true;
+  floorPointPlacementMode = false;
+  shadowDirectionState = -35;
+  shadowLengthState = 0.55;
+  manualShadowShapeEnabled = false;
   floorOffsetX = 0;
   floorOffsetY = 0;
   floorHeightState = 0;
   floorPitchState = 0;
   floorRollState = 0;
   floorScaleState = 1;
+  floorShadowEnabled.checked = false;
+  floorY.value = '-0.55';
+  floorTilt.value = '0';
+  floorShadowOpacity.value = '0.42';
+  floorShadowSoftness.value = '0.25';
+  floorGuideEnabled.checked = true;
+  shadowDirection.value = '-35';
+  shadowLength.value = '0.55';
   floorHeight.value = '0';
   floorPitch.value = '0';
+  floorPointMarker.classList.remove('active');
+  syncProjectedShadowRendering();
   updateFloorLabels();
   updateVirtualFloor();
+
+  // Close adjustment panels and their guides.
+  closeAdjustmentPanels();
+  savePanel.classList.remove('open');
+  updatePerspectiveGuide();
+  updateVirtualFloor();
+  syncQuickToggleButtons();
+
+  statusEl.textContent = '撮影設定を初期状態に戻しました';
 });
 
 hideBtn.addEventListener('click', () => {
@@ -1345,6 +1542,7 @@ closeLightBtn.addEventListener('click', () => {
 
 fovBtn.addEventListener('click', () => {
   fovPanel.classList.toggle('open');
+  updatePerspectiveGuide();
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   colorPanel.classList.remove('open');
@@ -1355,6 +1553,7 @@ fovBtn.addEventListener('click', () => {
 
 closeFovBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
+  updatePerspectiveGuide();
 });
 
 colorBtn.addEventListener('click', () => {
@@ -1551,15 +1750,22 @@ shadowOffset.addEventListener('input', () => {
   updateGroundShadow();
 });
 
-fovRange.addEventListener('input', () => {
-  camera.fov = Number(fovRange.value);
+function setFovKeepingApparentSize(nextFov) {
+  const oldFov = camera.fov;
+  compensateProjection(oldFov, camera.aspect, nextFov, camera.aspect);
+  camera.fov = nextFov;
   camera.updateProjectionMatrix();
+  updatePerspectiveGuide();
+  boostLiveFps();
+}
+
+fovRange.addEventListener('input', () => {
+  setFovKeepingApparentSize(Number(fovRange.value));
   fovOut.textContent = `${Math.round(camera.fov)}°`;
 });
 
 resetFovBtn.addEventListener('click', () => {
-  camera.fov = DEFAULT_FOV;
-  camera.updateProjectionMatrix();
+  setFovKeepingApparentSize(DEFAULT_FOV);
   fovRange.value = String(DEFAULT_FOV);
   fovOut.textContent = `${DEFAULT_FOV}°`;
 });
@@ -1907,9 +2113,11 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
     suppressFloorGuideForCapture = true;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     renderer.render(scene, camera);
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
 
     // Downsampling is the antialiasing pass.
     ctx.drawImage(renderer.domElement, 0, 0, renderW, renderH, 0, 0, outW, outH);
@@ -1923,13 +2131,16 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
     suppressFloorGuideForCapture = true;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     renderer.render(scene, camera);
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     ctx.drawImage(renderer.domElement, 0, 0, outW, outH);
   } finally {
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     // Restore the lightweight live preview renderer.
     renderer.setPixelRatio(oldRatio);
     renderer.setSize(cssW, cssH, false);
