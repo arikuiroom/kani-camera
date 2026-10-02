@@ -1913,7 +1913,16 @@ function endPointer(e) {
     lastDistance: gestureStart.distance,
     active: false
   } : null;
-  boostLiveFps();
+
+  // While a finger remains down, keep the interaction frame rate active.
+  // Once every finger is released, drop straight back to the idle frame rate
+  // instead of keeping the old 500 ms high-FPS tail. This reduces unnecessary
+  // GPU work after repeated direct gestures on iPhone.
+  if (touches.size > 0) {
+    boostLiveFps();
+  } else {
+    interactionBoostUntil = 0;
+  }
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
