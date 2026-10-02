@@ -464,6 +464,29 @@ function updateFloorPivotMarker() {
   floorPivotMarker.classList.add('visible');
 }
 
+// Bounds of the actual crab-guitar meshes only. The perspective guide is a
+// child of the model so it follows rotation, but must never affect floor/shadow
+// calculations.
+function getCrabGuitarWorldBox() {
+  const box = new THREE.Box3();
+  let hasBounds = false;
+  if (!model) return box;
+  model.updateMatrixWorld(true);
+  model.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+    if (!child.geometry.boundingBox) return;
+    const childBox = child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld);
+    if (!hasBounds) {
+      box.copy(childBox);
+      hasBounds = true;
+    } else {
+      box.union(childBox);
+    }
+  });
+  return box;
+}
+
 function updateVirtualFloor() {
   const floorUIActive = floorPanel.classList.contains('open');
   if (!floorShadowEnabledState && !floorUIActive) {
@@ -482,7 +505,7 @@ function updateVirtualFloor() {
   let pivotY = floorYState + floorOffsetY + floorHeightState;
   let pivotZ = 0;
   if (model) {
-    const box = new THREE.Box3().setFromObject(model);
+    const box = getCrabGuitarWorldBox();
     if (!box.isEmpty()) {
       pivotX += model.position.x;
       pivotY = box.min.y + floorHeightState + floorOffsetY;
