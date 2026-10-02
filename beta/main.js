@@ -227,7 +227,7 @@ function applyCaptureViewport() {
   document.documentElement.style.setProperty('--capture-width', `${v.width}px`);
   document.documentElement.style.setProperty('--capture-height', `${v.height}px`);
   if (Math.abs(newAspect - oldAspect) > 0.001) {
-    compensateProjectionScale(camera.fov, oldAspect, camera.fov, newAspect);
+    compensateProjection(camera.fov, oldAspect, camera.fov, newAspect);
   }
   camera.aspect = newAspect;
   camera.updateProjectionMatrix();
@@ -241,49 +241,92 @@ const initialViewport = getCaptureViewport();
 const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, initialViewport.width / initialViewport.height, 0.01, 100);
 camera.position.set(0, 0, 5);
 
-// Keep the model's apparent screen size stable while projection changes.
-// We use the smaller viewport dimension as the reference so portrait/landscape
-// rotation does not make the crab guitar suddenly jump in size.
-function projectionScaleFor(fovDeg = camera.fov, aspect = camera.aspect) {
-  const v = THREE.MathUtils.degToRad(fovDeg);
-  const tanV = Math.tan(v * 0.5);
+// Projection compensation uses the model center's depth along the camera view
+// axis. This is the quantity PerspectiveCamera actually uses for magnification;
+// Euclidean camera-to-model distance is wrong when the model has been moved sideways.
+function projectionFactor(fovDeg, aspect) {
+  const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg) * 0.5);
   const tanH = tanV * aspect;
   return 1 / Math.min(tanV, tanH);
 }
-
-function compensateProjectionScale(oldFov, oldAspect, newFov, newAspect) {
-  if (!model) return;
-  const oldScale = projectionScaleFor(oldFov, oldAspect);
-  const newScale = projectionScaleFor(newFov, newAspect);
-  if (!Number.isFinite(oldScale) || !Number.isFinite(newScale) || newScale <= 0) return;
-
-  // Moving the model along the camera viewing axis is equivalent to changing
-  // camera-to-model distance, but preserves the user's screen-space X/Y placement.
-  const oldDistance = camera.position.distanceTo(model.position);
-  const newDistance = oldDistance * (newScale / oldScale);
+function modelViewDepth() {
+  if (!model) return null;
   const viewDir = new THREE.Vector3();
   camera.getWorldDirection(viewDir);
-  model.position.addScaledVector(viewDir, oldDistance - newDistance);
+  return {
+    viewDir,
+    depth: new THREE.Vector3().subVectors(model.position, camera.position).dot(viewDir)
+  };
+}
+function compensateProjection(oldFov, oldAspect, newFov, newAspect) {
+  const state = modelViewDepth();
+  if (!state || state.depth <= 0.01) return;
+  const oldFactor = projectionFactor(oldFov, oldAspect);
+  const newFactor = projectionFactor(newFov, newAspect);
+  // Apparent size is proportional to factor / depth.
+  const newDepth = state.depth * (newFactor / oldFactor);
+  model.position.addScaledVector(state.viewDir, newDepth - state.depth);
 }
 
 let perspectiveGuide = null;
+let perspectiveGuideBounds = null;
 function ensurePerspectiveGuide() {
   if (!model || perspectiveGuide) return;
-  const box = new THREE.Box3().setFromObject(model);
-  const helper = new THREE.Box3Helper(box, 0xffffff);
-  helper.material.transparent = true;
-  helper.material.opacity = 0.78;
-  helper.material.depthTest = false;
-  helper.renderOrder = 999;
-  helper.visible = false;
-  scene.add(helper);
-  perspectiveGuide = helper;
+
+  // Build the box in the model's own local coordinates. Parenting it to the
+  // model makes the guide follow every 3D rotation instead of rebuilding an
+  // axis-aligned world box on each frame.
+  model.updateMatrixWorld(true);
+  const inverseModel = model.matrixWorld.clone().invert();
+  const localBox = new THREE.Box3();
+  const tempBox = new THREE.Box3();
+  const tempPoint = new THREE.Vector3();
+  let hasBounds = false;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+    if (!child.geometry.boundingBox) return;
+    tempBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
+    for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) for (let zi = 0; zi < 2; zi++) {
+      tempPoint.set(
+        xi ? tempBox.max.x : tempBox.min.x,
+        yi ? tempBox.max.y : tempBox.min.y,
+        zi ? tempBox.max.z : tempBox.min.z
+      ).applyMatrix4(inverseModel);
+      if (!hasBounds) {
+        localBox.min.copy(tempPoint);
+        localBox.max.copy(tempPoint);
+        hasBounds = true;
+      } else {
+        localBox.expandByPoint(tempPoint);
+      }
+    }
+  });
+  if (!hasBounds) return;
+
+  perspectiveGuideBounds = localBox.clone();
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  localBox.getSize(size);
+  localBox.getCenter(center);
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const edges = new THREE.EdgesGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.78,
+    depthTest: false
+  });
+  perspectiveGuide = new THREE.LineSegments(edges, material);
+  perspectiveGuide.position.copy(center);
+  perspectiveGuide.renderOrder = 999;
+  perspectiveGuide.visible = false;
+  model.add(perspectiveGuide);
 }
 function updatePerspectiveGuide() {
   if (!model) return;
   ensurePerspectiveGuide();
   if (!perspectiveGuide) return;
-  perspectiveGuide.box.setFromObject(model);
   perspectiveGuide.visible = fovPanel.classList.contains('open') && !suppressFloorGuideForCapture;
 }
 
@@ -1610,7 +1653,7 @@ shadowOffset.addEventListener('input', () => {
 
 function setFovKeepingApparentSize(nextFov) {
   const oldFov = camera.fov;
-  compensateProjectionScale(oldFov, camera.aspect, nextFov, camera.aspect);
+  compensateProjection(oldFov, camera.aspect, nextFov, camera.aspect);
   camera.fov = nextFov;
   camera.updateProjectionMatrix();
   updatePerspectiveGuide();
