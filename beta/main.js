@@ -1802,8 +1802,9 @@ const touches = new Map();
 let gestureStart = null;
 let floorDragPointerId = null;
 const TWO_FINGER_MOVE_DEADZONE = 1.5;
-const TWO_FINGER_SCALE_DEADZONE = 0.0025;
+const TWO_FINGER_PINCH_START_RATIO = 0.045; // 4.5% from the initial finger spacing
 const TWO_FINGER_TWIST_DEADZONE = THREE.MathUtils.degToRad(0.35);
+let pinchGesture = null;
 
 canvas.addEventListener('pointerdown', (e) => {
   boostLiveFps();
@@ -1815,6 +1816,13 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   gestureStart = snapshotGesture();
+  if (gestureStart) {
+    pinchGesture = {
+      startDistance: gestureStart.distance,
+      lastDistance: gestureStart.distance,
+      active: false
+    };
+  }
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -1855,10 +1863,27 @@ canvas.addEventListener('pointermove', (e) => {
         model.position.y -= moveDy * moveSpeed;
       }
 
-      // Pinch scale.
-      const scaleFactor = current.distance / gestureStart.distance;
-      if (Math.abs(scaleFactor - 1) >= TWO_FINGER_SCALE_DEADZONE) {
+      // Scale only after the finger spacing has changed clearly enough from
+      // the beginning of this two-finger gesture. Small spacing changes caused
+      // by translating or twisting are ignored, preventing "breathing" size.
+      if (!pinchGesture) {
+        pinchGesture = {
+          startDistance: gestureStart.distance,
+          lastDistance: gestureStart.distance,
+          active: false
+        };
+      }
+      if (!pinchGesture.active) {
+        const pinchRatio = Math.abs(current.distance / pinchGesture.startDistance - 1);
+        if (pinchRatio >= TWO_FINGER_PINCH_START_RATIO) {
+          pinchGesture.active = true;
+          // Start scaling from this point so crossing the threshold never jumps.
+          pinchGesture.lastDistance = current.distance;
+        }
+      } else {
+        const scaleFactor = current.distance / Math.max(1, pinchGesture.lastDistance);
         model.scale.multiplyScalar(scaleFactor);
+        pinchGesture.lastDistance = current.distance;
       }
 
       // Two-finger twist around the camera viewing axis.
@@ -1883,6 +1908,11 @@ function endPointer(e) {
   if (floorDragPointerId === e.pointerId) floorDragPointerId = null;
   touches.delete(e.pointerId);
   gestureStart = snapshotGesture();
+  pinchGesture = gestureStart ? {
+    startDistance: gestureStart.distance,
+    lastDistance: gestureStart.distance,
+    active: false
+  } : null;
   boostLiveFps();
 }
 canvas.addEventListener('pointerup', endPointer);
