@@ -1156,11 +1156,25 @@ loader.load(
   }
 );
 
+let viewportSettleTimer = 0;
+let viewportSettleRaf = 0;
+
 function resize() {
-  applyCaptureViewport();
+  // iOS emits several resize/visualViewport changes while rotating.
+  // Apply once on the next frame, then re-check after Safari has settled.
+  cancelAnimationFrame(viewportSettleRaf);
+  clearTimeout(viewportSettleTimer);
+  viewportSettleRaf = requestAnimationFrame(() => {
+    applyCaptureViewport();
+    viewportSettleTimer = setTimeout(() => {
+      applyCaptureViewport();
+    }, 260);
+  });
 }
+
 addEventListener('resize', resize);
-addEventListener('orientationchange', () => setTimeout(resize, 120));
+addEventListener('orientationchange', resize);
+window.visualViewport?.addEventListener('resize', resize);
 
 const IDLE_FRAME_INTERVAL = 1000 / 5;
 const INTERACTION_FRAME_INTERVAL = 1000 / 30;
