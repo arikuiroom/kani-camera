@@ -220,13 +220,19 @@ function getCaptureViewport() {
 
 function applyCaptureViewport() {
   const v = getCaptureViewport();
+  const oldAspect = camera.aspect;
+  const newAspect = v.width / v.height;
   document.documentElement.style.setProperty('--capture-left', `${v.left}px`);
   document.documentElement.style.setProperty('--capture-top', `${v.top}px`);
   document.documentElement.style.setProperty('--capture-width', `${v.width}px`);
   document.documentElement.style.setProperty('--capture-height', `${v.height}px`);
-  camera.aspect = v.width / v.height;
+  if (Math.abs(newAspect - oldAspect) > 0.001) {
+    compensateProjectionScale(camera.fov, oldAspect, camera.fov, newAspect);
+  }
+  camera.aspect = newAspect;
   camera.updateProjectionMatrix();
   renderer.setSize(v.width, v.height, false);
+  updatePerspectiveGuide();
   return v;
 }
 
@@ -234,6 +240,53 @@ const scene = new THREE.Scene();
 const initialViewport = getCaptureViewport();
 const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, initialViewport.width / initialViewport.height, 0.01, 100);
 camera.position.set(0, 0, 5);
+
+// Keep the model's apparent screen size stable while projection changes.
+// We use the smaller viewport dimension as the reference so portrait/landscape
+// rotation does not make the crab guitar suddenly jump in size.
+function projectionScaleFor(fovDeg = camera.fov, aspect = camera.aspect) {
+  const v = THREE.MathUtils.degToRad(fovDeg);
+  const tanV = Math.tan(v * 0.5);
+  const tanH = tanV * aspect;
+  return 1 / Math.min(tanV, tanH);
+}
+
+function compensateProjectionScale(oldFov, oldAspect, newFov, newAspect) {
+  if (!model) return;
+  const oldScale = projectionScaleFor(oldFov, oldAspect);
+  const newScale = projectionScaleFor(newFov, newAspect);
+  if (!Number.isFinite(oldScale) || !Number.isFinite(newScale) || newScale <= 0) return;
+
+  // Moving the model along the camera viewing axis is equivalent to changing
+  // camera-to-model distance, but preserves the user's screen-space X/Y placement.
+  const oldDistance = camera.position.distanceTo(model.position);
+  const newDistance = oldDistance * (newScale / oldScale);
+  const viewDir = new THREE.Vector3();
+  camera.getWorldDirection(viewDir);
+  model.position.addScaledVector(viewDir, oldDistance - newDistance);
+}
+
+let perspectiveGuide = null;
+function ensurePerspectiveGuide() {
+  if (!model || perspectiveGuide) return;
+  const box = new THREE.Box3().setFromObject(model);
+  const helper = new THREE.Box3Helper(box, 0xffffff);
+  helper.material.transparent = true;
+  helper.material.opacity = 0.78;
+  helper.material.depthTest = false;
+  helper.renderOrder = 999;
+  helper.visible = false;
+  scene.add(helper);
+  perspectiveGuide = helper;
+}
+function updatePerspectiveGuide() {
+  if (!model) return;
+  ensurePerspectiveGuide();
+  if (!perspectiveGuide) return;
+  perspectiveGuide.box.setFromObject(model);
+  perspectiveGuide.visible = fovPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+}
+
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -1142,6 +1195,7 @@ loader.load(
     model.rotation.set(0.05, -0.2, -0.12);
     model.position.set(0, 0, 0);
     scene.add(model);
+    ensurePerspectiveGuide();
     updateGroundShadow();
     updateVirtualFloor();
     updateShadowFromDirectControls();
@@ -1201,6 +1255,7 @@ function render(now = 0) {
   // model bounds traversal unless the user is actually using them.
   if (shadowEnabledState || groundShadow) updateGroundShadow();
   if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
+  if (fovPanel.classList.contains('open')) updatePerspectiveGuide();
 
   renderer.render(scene, camera);
 }
@@ -1345,6 +1400,7 @@ closeLightBtn.addEventListener('click', () => {
 
 fovBtn.addEventListener('click', () => {
   fovPanel.classList.toggle('open');
+  updatePerspectiveGuide();
   inputPanel.classList.remove('open');
   lightPanel.classList.remove('open');
   colorPanel.classList.remove('open');
@@ -1355,6 +1411,7 @@ fovBtn.addEventListener('click', () => {
 
 closeFovBtn.addEventListener('click', () => {
   fovPanel.classList.remove('open');
+  updatePerspectiveGuide();
 });
 
 colorBtn.addEventListener('click', () => {
@@ -1551,15 +1608,22 @@ shadowOffset.addEventListener('input', () => {
   updateGroundShadow();
 });
 
-fovRange.addEventListener('input', () => {
-  camera.fov = Number(fovRange.value);
+function setFovKeepingApparentSize(nextFov) {
+  const oldFov = camera.fov;
+  compensateProjectionScale(oldFov, camera.aspect, nextFov, camera.aspect);
+  camera.fov = nextFov;
   camera.updateProjectionMatrix();
+  updatePerspectiveGuide();
+  boostLiveFps();
+}
+
+fovRange.addEventListener('input', () => {
+  setFovKeepingApparentSize(Number(fovRange.value));
   fovOut.textContent = `${Math.round(camera.fov)}°`;
 });
 
 resetFovBtn.addEventListener('click', () => {
-  camera.fov = DEFAULT_FOV;
-  camera.updateProjectionMatrix();
+  setFovKeepingApparentSize(DEFAULT_FOV);
   fovRange.value = String(DEFAULT_FOV);
   fovOut.textContent = `${DEFAULT_FOV}°`;
 });
@@ -1907,9 +1971,11 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
     suppressFloorGuideForCapture = true;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     renderer.render(scene, camera);
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
 
     // Downsampling is the antialiasing pass.
     ctx.drawImage(renderer.domElement, 0, 0, renderW, renderH, 0, 0, outW, outH);
@@ -1923,13 +1989,16 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
     suppressFloorGuideForCapture = true;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     renderer.render(scene, camera);
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     ctx.drawImage(renderer.domElement, 0, 0, outW, outH);
   } finally {
     suppressFloorGuideForCapture = false;
     updateVirtualFloor();
+    updatePerspectiveGuide();
     // Restore the lightweight live preview renderer.
     renderer.setPixelRatio(oldRatio);
     renderer.setSize(cssW, cssH, false);
