@@ -1638,11 +1638,24 @@ canvas.addEventListener('pointermove', (e) => {
       model.position.x += dx * k;
       model.position.y -= dy * k;
     } else {
-      // Drag the model itself in 3D.
-      // Horizontal drag turns left/right; vertical drag tilts up/down.
+      // Screen-relative 3D rotation.
+      // Horizontal drag rotates around the screen's vertical axis, while
+      // vertical drag rotates around the screen's horizontal axis.
+      // Premultiplying keeps these axes camera/screen-relative regardless of
+      // the model's current orientation or any previous two-finger twist.
       const rotateSpeed = 0.010;
-      model.rotation.y += dx * rotateSpeed;
-      model.rotation.x += dy * rotateSpeed;
+      const screenRight = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const screenUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const yaw = new THREE.Quaternion()
+        .setFromAxisAngle(screenUp, dx * rotateSpeed);
+      const pitch = new THREE.Quaternion()
+        .setFromAxisAngle(screenRight, dy * rotateSpeed);
+      model.quaternion.premultiply(yaw);
+      model.quaternion.premultiply(pitch);
     }
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
