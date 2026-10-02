@@ -1651,9 +1651,9 @@ canvas.addEventListener('pointermove', (e) => {
         .applyQuaternion(camera.quaternion)
         .normalize();
       const yaw = new THREE.Quaternion()
-        // Dragging right should bring the crab-guitar's own right side
-        // toward the viewer (grab-and-drag / virtual trackball direction).
-        .setFromAxisAngle(screenUp, -dx * rotateSpeed);
+        // Horizontal drag direction restored after device test:
+        // dragging right uses positive rotation around the screen-up axis.
+        .setFromAxisAngle(screenUp, dx * rotateSpeed);
       const pitch = new THREE.Quaternion()
         .setFromAxisAngle(screenRight, dy * rotateSpeed);
       model.quaternion.premultiply(yaw);
