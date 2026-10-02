@@ -1374,16 +1374,56 @@ resetBtn.addEventListener('click', () => {
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
+
+  // Round shadow: restore every setting to the app defaults.
+  shadowEnabledState = false;
+  shadowOpacityState = 0.50;
+  shadowBlurState = 0.30;
+  shadowSizeState = 0.65;
+  shadowOffsetState = -0.18;
+  shadowEnabled.checked = false;
+  shadowOpacity.value = '0.50';
+  shadowBlur.value = '0.30';
+  shadowSize.value = '0.65';
+  shadowOffset.value = '-0.18';
+  refreshShadowTexture();
+  updateShadowLabels();
+  updateGroundShadow();
+
+  // Virtual floor/projected shadow: restore every setting to the app defaults.
+  floorShadowEnabledState = false;
+  floorYState = -0.55;
+  floorTiltState = 0;
+  floorShadowOpacityState = 0.42;
+  floorShadowSoftnessState = 0.25;
+  floorGuideEnabledState = true;
+  floorPointPlacementMode = false;
+  shadowDirectionState = -35;
+  shadowLengthState = 0.55;
+  manualShadowShapeEnabled = false;
   floorOffsetX = 0;
   floorOffsetY = 0;
   floorHeightState = 0;
   floorPitchState = 0;
   floorRollState = 0;
   floorScaleState = 1;
+
+  floorShadowEnabled.checked = false;
+  floorY.value = '-0.55';
+  floorTilt.value = '0';
+  floorShadowOpacity.value = '0.42';
+  floorShadowSoftness.value = '0.25';
+  floorGuideEnabled.checked = true;
+  shadowDirection.value = '-35';
+  shadowLength.value = '0.55';
   floorHeight.value = '0';
   floorPitch.value = '0';
+  floorPointMarker.classList.remove('active');
+
+  syncProjectedShadowRendering();
   updateFloorLabels();
   updateVirtualFloor();
+  syncQuickToggleButtons();
 });
 
 hideBtn.addEventListener('click', () => {
