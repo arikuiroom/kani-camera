@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.20.20 beta</title>
+<title>カニギター カメラ v1.21.0 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -139,9 +139,33 @@
       gap: 4px;
     }
     .top-actions button {
-      padding: 9px 9px;
-      font-size: 18px;
+      padding: 7px 8px;
+      font-size: 15px;
       white-space: nowrap;
+    }
+    .tool-icon {
+      display: block;
+      width: 28px;
+      height: 28px;
+      margin: 0 auto 3px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .tool-icon.fill { fill: currentColor; stroke: none; }
+    .mode-switch .tool-icon, #flipBtn .tool-icon {
+      display: inline-block;
+      width: 23px;
+      height: 23px;
+      margin: 0 5px -6px 0;
+      vertical-align: middle;
+    }
+    #resetBtn .tool-icon {
+      width: 25px;
+      height: 25px;
+      margin: 0 auto 1px;
     }
     .status {
       position: fixed;
@@ -730,11 +754,11 @@
     <div class="topbar">
       <div id="status" class="pill status">モデル読み込み中…</div>
       <div class="top-actions">
-        <button id="fovBtn">パース</button>
-        <button id="blendBtn" class="quick-toggle active" aria-label="タップで調整メニューを開閉">なじみ</button>
-        <button id="lightBtn" class="quick-toggle" aria-label="タップでAUTO ON/OFF、長押しで調整">照明</button>
-        <button id="shadowBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">丸影</button>
-        <button id="floorBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉">床</button>
+        <button id="fovBtn"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8 Q16 13 27 8 V24 Q16 19 5 24 Z"/><path d="M16 11 V21"/></svg>パース</button>
+        <button id="blendBtn" class="quick-toggle active" aria-label="タップで調整メニューを開閉"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 11 C9 6 13 6 18 11 S27 16 30 11"/><path d="M4 21 C9 16 13 16 18 21 S27 26 30 21"/></svg>なじみ</button>
+        <button id="lightBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M11 14a5 5 0 1 1 10 0c0 3-2 4-3 6h-4c-1-2-3-3-3-6Z"/><path d="M14 23h4M14.5 26h3M16 3v3M5 14h3M24 14h3M8 6l2 2M24 6l-2 2"/></svg>照明</button>
+        <button id="shadowBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉"><svg class="tool-icon fill" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="11" ry="5" class="tool-icon-fill"/></svg>丸影</button>
+        <button id="floorBtn" class="quick-toggle" aria-label="タップで調整メニューを開閉"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24 10 9h12l4 15Z"/><path d="M10 14h12M8 19h16M14 9l-2 15M18 9l2 15"/></svg>床</button>
         <button id="moreBtn" aria-label="その他のメニュー">•••</button>
       </div>
     </div>
@@ -744,7 +768,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.20.20 beta</div>
+      <div class="menu-version">Kani Camera v1.21.0 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -950,14 +974,14 @@
       2本指：拡大縮小・画面内回転
     </div>
     <div class="mode-switch" aria-label="操作モード">
-      <button id="moveModeBtn" class="active">移動</button>
-      <button id="rotateModeBtn">3D回転</button>
+      <button id="moveModeBtn" class="active"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3v26M3 16h26M16 3l-4 4M16 3l4 4M16 29l-4-4M16 29l4-4M3 16l4-4M3 16l4 4M29 16l-4-4M29 16l-4 4"/></svg>移動</button>
+      <button id="rotateModeBtn"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="m16 5 7 4v8l-7 4-7-4V9Z"/><path d="m9 9 7 4 7-4M16 13v8"/><path d="M7 24c5 5 13 5 18 0M7 24l1-5M7 24l5 1"/></svg>3D回転</button>
     </div>
     <div class="controls">
       <button id="captureBtn" class="capture" aria-label="撮影"></button>
     </div>
-    <button id="flipBtn">カメラ切替</button>
-    <button id="resetBtn" aria-label="位置を戻す">↶<br>リセット</button>
+    <button id="flipBtn"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 11h3l2-3h5l2 3h2a3 3 0 0 1 3 3v8H8v-5"/><circle cx="17" cy="16.5" r="3.5"/><path d="M8 8a8 8 0 0 0-4 7M4 15l-2-3M4 15l3-1M24 24a8 8 0 0 0 4-7M28 17l2 3M28 17l-3 1"/></svg>カメラ切替</button>
+    <button id="resetBtn" aria-label="位置を戻す"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 10a9 9 0 1 1-1 11"/><path d="M9 10H4V5"/></svg>リセット</button>
   </div>
 
   <div id="preview">
@@ -982,7 +1006,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.20.20 beta</div>
+      <div class="start-version">Kani Camera v1.21.0 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
