@@ -1650,8 +1650,21 @@ canvas.addEventListener('pointermove', (e) => {
       const scaleFactor = current.distance / gestureStart.distance;
       model.scale.multiplyScalar(scaleFactor);
 
-      // Reversed from v1.1 so the object follows the fingers more naturally.
-      model.rotation.z -= current.angle - gestureStart.angle;
+      // Two-finger twist is screen-relative, not model-local.
+      // Rotate around the camera viewing axis expressed in world space, while
+      // keeping the crab-guitar center fixed. This remains intuitive even
+      // after the model has been turned sideways or backwards.
+      let twistDelta = current.angle - gestureStart.angle;
+      // Keep atan2 wrap-around from causing a sudden near-360-degree jump.
+      if (twistDelta > Math.PI) twistDelta -= Math.PI * 2;
+      if (twistDelta < -Math.PI) twistDelta += Math.PI * 2;
+      const screenAxis = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const screenTwist = new THREE.Quaternion()
+        .setFromAxisAngle(screenAxis, -twistDelta);
+      model.quaternion.premultiply(screenTwist);
+
       gestureStart = current;
     }
   }
