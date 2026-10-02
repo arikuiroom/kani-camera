@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.21.0 beta</title>
+<title>カニギター カメラ v1.21.1 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -155,11 +155,40 @@
       stroke-linejoin: round;
     }
     .tool-icon.fill { fill: currentColor; stroke: none; }
-    .mode-switch .tool-icon, #flipBtn .tool-icon {
+    .top-actions .tool-icon {
+      width: 34px;
+      height: 34px;
+      margin-bottom: 1px;
+    }
+    .top-actions button {
+      font-size: 12px;
+      line-height: 1.1;
+    }
+    .mode-switch {
+      gap: 3px;
+      padding: 4px;
+    }
+    .mode-switch button {
+      min-width: 54px;
+      padding: 6px 7px 5px;
+      font-size: 11px;
+      line-height: 1.05;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .mode-switch .tool-icon {
+      display: block;
+      width: 30px;
+      height: 30px;
+      margin: 0 auto 2px;
+    }
+    #flipBtn .tool-icon {
       display: inline-block;
-      width: 23px;
-      height: 23px;
-      margin: 0 5px -6px 0;
+      width: 27px;
+      height: 27px;
+      margin: 0 5px -7px 0;
       vertical-align: middle;
     }
     #resetBtn .tool-icon {
@@ -768,7 +797,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.21.0 beta</div>
+      <div class="menu-version">Kani Camera v1.21.1 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -1006,7 +1035,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.21.0 beta</div>
+      <div class="start-version">Kani Camera v1.21.1 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
