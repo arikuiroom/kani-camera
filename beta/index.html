@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.21.4 beta</title>
+<title>カニギター カメラ v1.21.5 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -204,7 +204,7 @@
       display: block;
       width: 34px;
       height: 34px;
-      margin: 0 auto 2px;
+      margin: 0 auto -1px;
     }
     #resetBtn {
       font-size: 11px !important;
@@ -214,7 +214,7 @@
     #resetBtn .tool-icon {
       width: 34px;
       height: 34px;
-      margin: 0 auto 2px;
+      margin: 0 auto -1px;
     }
     #moreBtn {
       font-size: 11px;
@@ -738,9 +738,17 @@
         width: auto;
         height: 100%;
         flex-direction: column;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
-        gap: 8px;
+        gap: 4px;
+      }
+      .top-actions button {
+        padding-top: 5px;
+        padding-bottom: 5px;
+      }
+      .top-actions .tool-icon {
+        width: 31px;
+        height: 31px;
       }
       #flipBtn {
         left: auto;
@@ -754,6 +762,10 @@
         top: 50%;
         bottom: auto;
         transform: translateY(-50%);
+      }
+      #resetBtn {
+        left: auto;
+        right: max(18px, env(safe-area-inset-right));
       }
       .mode-switch {
         left: auto;
@@ -826,7 +838,7 @@
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.21.4 beta</div>
+      <div class="menu-version">Kani Camera v1.21.5 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -1064,7 +1076,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.21.4 beta</div>
+      <div class="start-version">Kani Camera v1.21.5 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
