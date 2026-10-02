@@ -1371,11 +1371,41 @@ flipBtn.addEventListener('click', async () => {
 
 resetBtn.addEventListener('click', () => {
   if (!model) return;
+
+  // Reset everything outside the Settings menu. Settings-menu items
+  // (input source, crab-guitar color/visibility, save format) are preserved.
+
+  // Crab guitar transform + interaction mode.
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
+  setInteractionMode('move');
 
-  // Round shadow: restore every setting to the app defaults.
+  // Perspective.
+  camera.fov = DEFAULT_FOV;
+  camera.updateProjectionMatrix();
+  fovRange.value = String(DEFAULT_FOV);
+  fovOut.textContent = `${DEFAULT_FOV}°`;
+
+  // Background matching.
+  blendEnabledState = true;
+  blendStrengthState = 0.75;
+  blendEnabled.checked = true;
+  blendStrength.value = '0.75';
+  resetBackgroundBlend();
+  updateBlendLabel();
+
+  // Lighting.
+  autoLight.checked = false;
+  autoLightingEnabled = false;
+  lightPower.value = '2.2';
+  lightAzimuth.value = '27';
+  lightElevation.value = '31';
+  updateLightLabels();
+  updateLightControlState();
+  setManualLighting();
+
+  // Round shadow.
   shadowEnabledState = false;
   shadowOpacityState = 0.50;
   shadowBlurState = 0.30;
@@ -1390,7 +1420,7 @@ resetBtn.addEventListener('click', () => {
   updateShadowLabels();
   updateGroundShadow();
 
-  // Virtual floor/projected shadow: restore every setting to the app defaults.
+  // Virtual floor/projected shadow.
   floorShadowEnabledState = false;
   floorYState = -0.55;
   floorTiltState = 0;
@@ -1407,7 +1437,6 @@ resetBtn.addEventListener('click', () => {
   floorPitchState = 0;
   floorRollState = 0;
   floorScaleState = 1;
-
   floorShadowEnabled.checked = false;
   floorY.value = '-0.55';
   floorTilt.value = '0';
@@ -1419,11 +1448,18 @@ resetBtn.addEventListener('click', () => {
   floorHeight.value = '0';
   floorPitch.value = '0';
   floorPointMarker.classList.remove('active');
-
   syncProjectedShadowRendering();
   updateFloorLabels();
   updateVirtualFloor();
+
+  // Close adjustment panels and their guides.
+  closeAdjustmentPanels();
+  savePanel.classList.remove('open');
+  updatePerspectiveGuide();
+  updateVirtualFloor();
   syncQuickToggleButtons();
+
+  statusEl.textContent = '撮影設定を初期状態に戻しました';
 });
 
 hideBtn.addEventListener('click', () => {
