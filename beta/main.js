@@ -204,7 +204,10 @@ function getCaptureViewport() {
   const freeY = Math.max(0, screenH - height);
   // Keep the complete 9:16 live frame inside the visible viewport.
   // The top band gets all remaining vertical space; nothing is hidden below.
-  const top = portrait ? freeY : freeY * 0.5;
+  // In portrait, lift the complete 9:16 frame slightly while keeping it
+  // fully visible and below the top controls. Capture uses this same viewport.
+  const portraitLift = portrait ? Math.min(18, freeY * 0.22) : 0;
+  const top = portrait ? Math.max(0, freeY - portraitLift) : freeY * 0.5;
 
   return {
     width,
@@ -353,7 +356,7 @@ function ensureVirtualFloor() {
 }
 
 function updateFloorPivotMarker() {
-  if (!floorPivot || !floorPanel.classList.contains('open') || suppressFloorGuideForCapture) {
+  if (!floorPivot || !floorPanel.classList.contains('open') || !floorGuideEnabledState || suppressFloorGuideForCapture) {
     floorPivotMarker.classList.remove('visible');
     return;
   }
