@@ -98,6 +98,14 @@ const fallbackSave = document.getElementById('fallbackSave');
 const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave');
 const closePreview = document.getElementById('closePreview');
 const saveHelp = document.getElementById('saveHelp');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const savePanel = document.getElementById('savePanel');
+const closeSaveBtn = document.getElementById('closeSaveBtn');
+const formatJpegBtn = document.getElementById('formatJpegBtn');
+const formatPngBtn = document.getElementById('formatPngBtn');
+const previewFormatJpegBtn = document.getElementById('previewFormatJpegBtn');
+const previewFormatPngBtn = document.getElementById('previewFormatPngBtn');
+const savePsdBtn = document.getElementById('savePsdBtn');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -111,19 +119,120 @@ let lastCaptureBlob = null;
 let lastCaptureUrl = null;
 let lastBackgroundBlob = null;
 let lastBackgroundUrl = null;
+let lastCaptureCanvas = null;
+let lastBackgroundCanvas = null;
+const SAVE_FORMAT_KEY = 'kani-camera-save-format';
+let saveFormat = (() => {
+  try {
+    const stored = localStorage.getItem(SAVE_FORMAT_KEY);
+    return stored === 'png' ? 'png' : 'jpeg';
+  } catch {
+    return 'jpeg';
+  }
+})();
+const JPEG_QUALITY = 0.92;
+
+function getSaveMime() {
+  return saveFormat === 'png' ? 'image/png' : 'image/jpeg';
+}
+function getSaveExtension() {
+  return saveFormat === 'png' ? 'png' : 'jpg';
+}
+function syncSaveFormatUI() {
+  const jpeg = saveFormat === 'jpeg';
+  formatJpegBtn.classList.toggle('active', jpeg);
+  formatPngBtn.classList.toggle('active', !jpeg);
+  previewFormatJpegBtn.classList.toggle('active', jpeg);
+  previewFormatPngBtn.classList.toggle('active', !jpeg);
+}
+function setSaveFormat(format) {
+  saveFormat = format === 'png' ? 'png' : 'jpeg';
+  try { localStorage.setItem(SAVE_FORMAT_KEY, saveFormat); } catch {}
+  syncSaveFormatUI();
+}
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
+  });
+}
+async function rebuildSavedBlobsForFormat() {
+  if (!lastCaptureCanvas || !lastBackgroundCanvas) return;
+  const [backgroundBlob, captureBlob] = await Promise.all([
+    canvasToBlob(lastBackgroundCanvas),
+    canvasToBlob(lastCaptureCanvas)
+  ]);
+  if (!backgroundBlob || !captureBlob) return;
+
+  lastBackgroundBlob = backgroundBlob;
+  if (lastBackgroundUrl) URL.revokeObjectURL(lastBackgroundUrl);
+  lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
+  fallbackBackgroundSave.href = lastBackgroundUrl;
+  fallbackBackgroundSave.style.display = 'none';
+
+  lastCaptureBlob = captureBlob;
+  if (lastCaptureUrl) URL.revokeObjectURL(lastCaptureUrl);
+  lastCaptureUrl = URL.createObjectURL(captureBlob);
+  previewImg.src = lastCaptureUrl;
+  fallbackSave.href = lastCaptureUrl;
+  fallbackSave.style.display = 'none';
+
+  const ext = getSaveExtension();
+  fallbackSave.download = `kani-guitar-photo.${ext}`;
+  fallbackBackgroundSave.download = `kani-guitar-background.${ext}`;
+  saveHelp.textContent = `保存解像度：${lastCaptureCanvas.width} × ${lastCaptureCanvas.height} px / ${saveFormat === 'png' ? 'PNG' : 'JPEG'}`;
+}
 
 const DEFAULT_FOV = 42;
 
-// High-quality capture (Beta v1.10)
-// Final image long edge is 3000 px.
-// The 3D layer is normally rendered at 2x width/height (4x pixel count)
-// and then downsampled for smoother antialiasing.
-const CAPTURE_LONG_EDGE = 3000;
-const CAPTURE_SUPERSAMPLE = 2;
-const CAPTURE_RENDER_EDGE_CAP = 6000;
+// Fixed 16:9 4K UHD capture. Portrait uses the rotated equivalent.
+const CAPTURE_LONG_EDGE = 3840;
+const CAPTURE_SHORT_EDGE = 2160;
+const CAPTURE_SUPERSAMPLE = 1;
+const CAPTURE_RENDER_EDGE_CAP = 3840;
+
+function getCaptureViewport() {
+  const screenW = innerWidth;
+  const screenH = window.visualViewport?.height || innerHeight;
+  const portrait = screenH >= screenW;
+  const aspect = portrait ? 9 / 16 : 16 / 9;
+  let width = screenW;
+  let height = width / aspect;
+  if (height > screenH) {
+    height = screenH;
+    width = height * aspect;
+  }
+  const freeY = Math.max(0, screenH - height);
+  // Keep the complete 9:16 live frame inside the visible viewport.
+  // The top band gets all remaining vertical space; nothing is hidden below.
+  // In portrait, lift the complete 9:16 frame slightly while keeping it
+  // fully visible and below the top controls. Capture uses this same viewport.
+  const portraitLift = portrait ? Math.min(18, freeY * 0.22) : 0;
+  const top = portrait ? Math.max(0, freeY - portraitLift) : freeY * 0.5;
+
+  return {
+    width,
+    height,
+    left: (screenW - width) / 2,
+    top,
+    portrait
+  };
+}
+
+function applyCaptureViewport() {
+  const v = getCaptureViewport();
+  document.documentElement.style.setProperty('--capture-left', `${v.left}px`);
+  document.documentElement.style.setProperty('--capture-top', `${v.top}px`);
+  document.documentElement.style.setProperty('--capture-width', `${v.width}px`);
+  document.documentElement.style.setProperty('--capture-height', `${v.height}px`);
+  camera.aspect = v.width / v.height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(v.width, v.height, false);
+  return v;
+}
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, innerWidth / innerHeight, 0.01, 100);
+const initialViewport = getCaptureViewport();
+const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, initialViewport.width / initialViewport.height, 0.01, 100);
 camera.position.set(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({
@@ -136,7 +245,11 @@ const renderer = new THREE.WebGLRenderer({
 // renders at its own output resolution, so saved-image quality is unaffected.
 const LIVE_PIXEL_RATIO_CAP = 1.5;
 renderer.setPixelRatio(Math.min(devicePixelRatio, LIVE_PIXEL_RATIO_CAP));
-renderer.setSize(innerWidth, innerHeight, false);
+renderer.setSize(initialViewport.width, initialViewport.height, false);
+document.documentElement.style.setProperty('--capture-left', `${initialViewport.left}px`);
+document.documentElement.style.setProperty('--capture-top', `${initialViewport.top}px`);
+document.documentElement.style.setProperty('--capture-width', `${initialViewport.width}px`);
+document.documentElement.style.setProperty('--capture-height', `${initialViewport.height}px`);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -243,7 +356,7 @@ function ensureVirtualFloor() {
 }
 
 function updateFloorPivotMarker() {
-  if (!floorPivot || !floorPanel.classList.contains('open') || suppressFloorGuideForCapture) {
+  if (!floorPivot || !floorPanel.classList.contains('open') || !floorGuideEnabledState || suppressFloorGuideForCapture) {
     floorPivotMarker.classList.remove('visible');
     return;
   }
@@ -728,6 +841,7 @@ function closeTopPanels() {
   shadowPanel.classList.remove('open');
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
+  savePanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -1042,14 +1156,25 @@ loader.load(
   }
 );
 
+let viewportSettleTimer = 0;
+let viewportSettleRaf = 0;
+
 function resize() {
-  const w = innerWidth;
-  const h = innerHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h, false);
+  // iOS emits several resize/visualViewport changes while rotating.
+  // Apply once on the next frame, then re-check after Safari has settled.
+  cancelAnimationFrame(viewportSettleRaf);
+  clearTimeout(viewportSettleTimer);
+  viewportSettleRaf = requestAnimationFrame(() => {
+    applyCaptureViewport();
+    viewportSettleTimer = setTimeout(() => {
+      applyCaptureViewport();
+    }, 260);
+  });
 }
+
 addEventListener('resize', resize);
+addEventListener('orientationchange', resize);
+window.visualViewport?.addEventListener('resize', resize);
 
 const IDLE_FRAME_INTERVAL = 1000 / 5;
 const INTERACTION_FRAME_INTERVAL = 1000 / 30;
@@ -1198,74 +1323,21 @@ function syncQuickToggleButtons() {
   floorBtn.classList.toggle('active', floorShadowEnabled.checked);
 }
 
-function installTapHoldControl(button, panel, toggleAction, afterOpen = null) {
-  const HOLD_MS = 520;
-  let holdTimer = null;
-  let longPressed = false;
-
-  button.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    longPressed = false;
-    try { button.setPointerCapture(e.pointerId); } catch {}
-    holdTimer = setTimeout(() => {
-      longPressed = true;
-      if (panel.classList.contains('open')) {
-        panel.classList.remove('open');
-      } else {
-        closeAdjustmentPanels();
-        panel.classList.add('open');
-        if (afterOpen) afterOpen();
-      }
-      if (navigator.vibrate) navigator.vibrate(15);
-    }, HOLD_MS);
-  });
-
-  const finish = (e) => {
-    if (holdTimer) clearTimeout(holdTimer);
-    holdTimer = null;
-    if (e && button.hasPointerCapture?.(e.pointerId)) {
-      try { button.releasePointerCapture(e.pointerId); } catch {}
+function installQuickMenu(button, panel, afterOpen = null) {
+  button.addEventListener('click', () => {
+    const willOpen = !panel.classList.contains('open');
+    closeAdjustmentPanels();
+    if (willOpen) {
+      panel.classList.add('open');
+      if (afterOpen) afterOpen();
     }
-  };
-  button.addEventListener('pointerup', finish);
-  button.addEventListener('pointercancel', finish);
-
-  button.addEventListener('click', (e) => {
-    if (longPressed) {
-      e.preventDefault();
-      longPressed = false;
-      return;
-    }
-    toggleAction();
-    syncQuickToggleButtons();
   });
-
-  button.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
-installTapHoldControl(lightBtn, lightPanel, () => {
-  autoLight.checked = !autoLight.checked;
-  updateLightControlState();
-});
-
-installTapHoldControl(blendBtn, blendPanel, () => {
-  blendEnabled.checked = !blendEnabled.checked;
-  blendEnabledState = blendEnabled.checked;
-  if (!blendEnabledState) resetBackgroundBlend();
-});
-
-installTapHoldControl(shadowBtn, shadowPanel, () => {
-  shadowEnabled.checked = !shadowEnabled.checked;
-  shadowEnabledState = shadowEnabled.checked;
-  updateGroundShadow();
-});
-
-installTapHoldControl(floorBtn, floorPanel, () => {
-  floorShadowEnabled.checked = !floorShadowEnabled.checked;
-  floorShadowEnabledState = floorShadowEnabled.checked;
-  syncProjectedShadowRendering();
-  updateVirtualFloor();
-}, updateVirtualFloor);
+installQuickMenu(lightBtn, lightPanel);
+installQuickMenu(blendBtn, blendPanel);
+installQuickMenu(shadowBtn, shadowPanel);
+installQuickMenu(floorBtn, floorPanel, updateVirtualFloor);
 
 closeLightBtn.addEventListener('click', () => {
   lightPanel.classList.remove('open');
@@ -1566,11 +1638,26 @@ canvas.addEventListener('pointermove', (e) => {
       model.position.x += dx * k;
       model.position.y -= dy * k;
     } else {
-      // Drag the model itself in 3D.
-      // Horizontal drag turns left/right; vertical drag tilts up/down.
+      // Screen-relative 3D rotation.
+      // Horizontal drag rotates around the screen's vertical axis, while
+      // vertical drag rotates around the screen's horizontal axis.
+      // Premultiplying keeps these axes camera/screen-relative regardless of
+      // the model's current orientation or any previous two-finger twist.
       const rotateSpeed = 0.010;
-      model.rotation.y += dx * rotateSpeed;
-      model.rotation.x += dy * rotateSpeed;
+      const screenRight = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const screenUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const yaw = new THREE.Quaternion()
+        // Horizontal drag direction restored after device test:
+        // dragging right uses positive rotation around the screen-up axis.
+        .setFromAxisAngle(screenUp, dx * rotateSpeed);
+      const pitch = new THREE.Quaternion()
+        .setFromAxisAngle(screenRight, dy * rotateSpeed);
+      model.quaternion.premultiply(yaw);
+      model.quaternion.premultiply(pitch);
     }
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
@@ -1578,8 +1665,21 @@ canvas.addEventListener('pointermove', (e) => {
       const scaleFactor = current.distance / gestureStart.distance;
       model.scale.multiplyScalar(scaleFactor);
 
-      // Reversed from v1.1 so the object follows the fingers more naturally.
-      model.rotation.z -= current.angle - gestureStart.angle;
+      // Two-finger twist is screen-relative, not model-local.
+      // Rotate around the camera viewing axis expressed in world space, while
+      // keeping the crab-guitar center fixed. This remains intuitive even
+      // after the model has been turned sideways or backwards.
+      let twistDelta = current.angle - gestureStart.angle;
+      // Keep atan2 wrap-around from causing a sudden near-360-degree jump.
+      if (twistDelta > Math.PI) twistDelta -= Math.PI * 2;
+      if (twistDelta < -Math.PI) twistDelta += Math.PI * 2;
+      const screenAxis = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const screenTwist = new THREE.Quaternion()
+        .setFromAxisAngle(screenAxis, -twistDelta);
+      model.quaternion.premultiply(screenTwist);
+
       gestureStart = current;
     }
   }
@@ -1605,6 +1705,129 @@ function snapshotGesture() {
   };
 }
 
+saveSettingsBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  savePanel.classList.add('open');
+  syncSaveFormatUI();
+});
+closeSaveBtn.addEventListener('click', () => savePanel.classList.remove('open'));
+formatJpegBtn.addEventListener('click', () => setSaveFormat('jpeg'));
+formatPngBtn.addEventListener('click', () => setSaveFormat('png'));
+previewFormatJpegBtn.addEventListener('click', async () => {
+  if (saveFormat === 'jpeg') return;
+  setSaveFormat('jpeg');
+  await rebuildSavedBlobsForFormat();
+});
+previewFormatPngBtn.addEventListener('click', async () => {
+  if (saveFormat === 'png') return;
+  setSaveFormat('png');
+  await rebuildSavedBlobsForFormat();
+});
+syncSaveFormatUI();
+
+
+function renderPsdLayer(width, height, shadowOnly) {
+  const c = document.createElement('canvas');
+  c.width = width; c.height = height;
+  const oldRatio = renderer.getPixelRatio();
+  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize);
+  const oldAspect = camera.aspect;
+  const floorVisible = floorPivot ? floorPivot.visible : false;
+  const groundVisible = groundShadow ? groundShadow.visible : false;
+  const materialStates = [];
+
+  renderer.setPixelRatio(1);
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  suppressFloorGuideForCapture = true;
+  updateVirtualFloor();
+
+  if (shadowOnly) {
+    if (floorPivot) floorPivot.visible = floorShadowEnabledState;
+    if (groundShadow) groundShadow.visible = shadowEnabledState;
+    if (model) model.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { materialStates.push([m, m.colorWrite]); m.colorWrite = false; });
+    });
+    renderer.shadowMap.needsUpdate = true;
+  } else {
+    if (floorPivot) floorPivot.visible = false;
+    if (groundShadow) groundShadow.visible = false;
+  }
+
+  renderer.render(scene, camera);
+  c.getContext('2d').drawImage(renderer.domElement, 0, 0, width, height);
+
+  materialStates.forEach(([m, v]) => { m.colorWrite = v; });
+  if (floorPivot) floorPivot.visible = floorVisible;
+  if (groundShadow) groundShadow.visible = groundVisible;
+  suppressFloorGuideForCapture = false;
+  updateVirtualFloor();
+  renderer.setPixelRatio(oldRatio);
+  renderer.setSize(oldSize.x, oldSize.y, false);
+  camera.aspect = oldAspect;
+  camera.updateProjectionMatrix();
+  return c;
+}
+
+async function saveLayeredPsd() {
+  if (!lastCaptureCanvas || !lastBackgroundCanvas) return;
+  if (!window.agPsd?.writePsd) {
+    alert('PSD書き出し機能を読み込めませんでした。最新版を再読み込みしてください。');
+    return;
+  }
+  savePsdBtn.disabled = true;
+  savePsdBtn.textContent = 'PSD作成中…';
+  let crab = null, shadow = null;
+  try {
+    const w = lastCaptureCanvas.width, h = lastCaptureCanvas.height;
+    crab = renderPsdLayer(w, h, false);
+    shadow = renderPsdLayer(w, h, true);
+    const data = window.agPsd.writePsd({
+      width: w, height: h, canvas: lastCaptureCanvas,
+      children: [
+        { name: 'BG', canvas: lastBackgroundCanvas },
+        { name: 'Shadow', canvas: shadow },
+        { name: 'Crabguitar', canvas: crab }
+      ]
+    }, { generateThumbnail: false });
+    const blob = new Blob([data], { type: 'application/vnd.adobe.photoshop' });
+    const now = new Date();
+    const pad2 = (value) => String(value).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}`;
+    const file = new File([blob], `Crabguitar${timestamp}.psd`, { type: blob.type });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      // Send only the PSD file. Do not add title/text/url: on iOS those can
+      // become an extra text item in the share sheet.
+      await navigator.share({ files: [file] });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+  } catch (e) {
+    if (e?.name !== 'AbortError') {
+      console.error(e);
+      alert('PSDの作成に失敗しました。4K PSDはメモリを多く使うため、Safariを再起動すると改善する場合があります。');
+    }
+  } finally {
+    if (crab) { crab.width = 1; crab.height = 1; }
+    if (shadow) { shadow.width = 1; shadow.height = 1; }
+    savePsdBtn.disabled = false;
+    savePsdBtn.textContent = 'PSD（レイヤー付き）';
+  }
+}
+savePsdBtn.addEventListener('click', saveLayeredPsd);
+
 captureBtn.addEventListener('click', () => {
   lastBackgroundBlob = null;
   if (lastBackgroundUrl) {
@@ -1619,20 +1842,13 @@ captureBtn.addEventListener('click', () => {
     return;
   }
 
-  const cssW = innerWidth;
-  const cssH = innerHeight;
+  const liveViewport = getCaptureViewport();
+  const cssW = liveViewport.width;
+  const cssH = liveViewport.height;
 
-  // Keep exactly the same aspect ratio as the live preview, but export at
-  // approximately 3000 px on the long edge.
-  let outW;
-  let outH;
-  if (cssW >= cssH) {
-    outW = CAPTURE_LONG_EDGE;
-    outH = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssH / cssW));
-  } else {
-    outH = CAPTURE_LONG_EDGE;
-    outW = Math.max(1, Math.round(CAPTURE_LONG_EDGE * cssW / cssH));
-  }
+  // Export the exact 16:9 live frame at 4K UHD.
+  const outW = liveViewport.portrait ? CAPTURE_SHORT_EDGE : CAPTURE_LONG_EDGE;
+  const outH = liveViewport.portrait ? CAPTURE_LONG_EDGE : CAPTURE_SHORT_EDGE;
 
   // Freeze the exact background frame used by this capture. This gives the
   // user a clean plate that matches the composite in timing, crop and size.
@@ -1700,7 +1916,7 @@ captureBtn.addEventListener('click', () => {
   } catch (e) {
     console.error('High-quality capture failed:', e);
 
-    // Fallback: still export at 3000px, just without supersampling.
+    // Fallback: still export at 4K UHD, just without supersampling.
     renderer.setPixelRatio(1);
     renderer.setSize(outW, outH, false);
     camera.aspect = outW / outH;
@@ -1721,6 +1937,9 @@ captureBtn.addEventListener('click', () => {
     camera.updateProjectionMatrix();
   }
 
+  lastBackgroundCanvas = backgroundOut;
+  lastCaptureCanvas = out;
+
   backgroundOut.toBlob((backgroundBlob) => {
     if (!backgroundBlob) return;
     lastBackgroundBlob = backgroundBlob;
@@ -1728,7 +1947,7 @@ captureBtn.addEventListener('click', () => {
     lastBackgroundUrl = URL.createObjectURL(backgroundBlob);
     fallbackBackgroundSave.href = lastBackgroundUrl;
     fallbackBackgroundSave.style.display = 'none';
-  }, 'image/png');
+  }, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
 
   out.toBlob((blob) => {
     if (!blob) {
@@ -1745,14 +1964,14 @@ captureBtn.addEventListener('click', () => {
     fallbackSave.href = lastCaptureUrl;
     fallbackSave.style.display = 'none';
     preview.style.display = 'flex';
-    saveHelp.textContent = `保存解像度：${outW} × ${outH} px`;
+    saveHelp.textContent = `保存解像度：${outW} × ${outH} px / ${saveFormat === 'png' ? 'PNG' : 'JPEG'}`;
     statusEl.textContent = `保存画像 ${outW}×${outH}px`;
-  }, 'image/png');
+  }, getSaveMime(), saveFormat === 'jpeg' ? JPEG_QUALITY : undefined);
 });
 
 async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
   if (!blob) return;
-  const file = new File([blob], filename, { type: 'image/png' });
+  const file = new File([blob], filename, { type: blob.type || getSaveMime() });
   try {
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       await navigator.share({ files: [file], title });
@@ -1769,11 +1988,15 @@ async function shareOrSaveBlob(blob, filename, title, fallbackLink) {
 }
 
 shareBtn.addEventListener('click', () => {
-  shareOrSaveBlob(lastCaptureBlob, 'kani-guitar-photo.png', 'カニギターといっしょ', fallbackSave);
+  const ext = getSaveExtension();
+  fallbackSave.download = `kani-guitar-photo.${ext}`;
+  shareOrSaveBlob(lastCaptureBlob, `kani-guitar-photo.${ext}`, 'カニギターといっしょ', fallbackSave);
 });
 
 shareBackgroundBtn.addEventListener('click', () => {
-  shareOrSaveBlob(lastBackgroundBlob, 'kani-guitar-background.png', '背景写真', fallbackBackgroundSave);
+  const ext = getSaveExtension();
+  fallbackBackgroundSave.download = `kani-guitar-background.${ext}`;
+  shareOrSaveBlob(lastBackgroundBlob, `kani-guitar-background.${ext}`, '背景写真', fallbackBackgroundSave);
 });
 
 closePreview.addEventListener('click', () => {
