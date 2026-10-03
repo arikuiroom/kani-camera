@@ -909,13 +909,27 @@ function updateAdaptiveLighting(now) {
   const data = lightSampleCtx.getImageData(0, 0, w, h).data;
 
   let r = 0, g = 0, b = 0, lumSum = 0;
+  let brightWeight = 0, brightX = 0, brightY = 0;
   const count = w * h;
   for (let i = 0; i < data.length; i += 4) {
     const rr = data[i] / 255;
     const gg = data[i + 1] / 255;
     const bb = data[i + 2] / 255;
+    const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
     r += rr; g += gg; b += bb;
-    lumSum += 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+    lumSum += lum;
+
+    // Track only the brightest parts of the image. Their weighted centroid is
+    // treated as the likely dominant real-world light source.
+    const px = (i / 4) % w;
+    const py = Math.floor((i / 4) / w);
+    const weight = Math.max(0, lum - 0.68);
+    if (weight > 0) {
+      const ww = weight * weight;
+      brightWeight += ww;
+      brightX += px * ww;
+      brightY += py * ww;
+    }
   }
   r /= count; g /= count; b /= count;
   const avgLum = lumSum / count;
@@ -947,7 +961,25 @@ function updateAdaptiveLighting(now) {
     ? THREE.MathUtils.lerp(0.30, 0.82, THREE.MathUtils.clamp(avgLum * 1.8, 0, 1))
     : 0.38 * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0);
   hemi.intensity += (photoFill * strength - hemi.intensity) * 0.35;
-  key.intensity = 0;
+
+  // v1.27.9 AUTO key-light experiment. For photo IBL, a bright window,
+  // monitor or ceiling lamp becomes a directional key from the same screen
+  // direction. This is deliberately visible so the first iPhone test can tell
+  // us whether the idea works.
+  if (iblSourceState === 'photo' && brightWeight > 0.002) {
+    const bx = brightX / brightWeight / Math.max(1, w - 1); // 0..1
+    const by = brightY / brightWeight / Math.max(1, h - 1); // 0..1
+    const nx = (bx - 0.5) * 2;
+    const ny = (0.5 - by) * 2;
+    const radius = 5;
+    key.position.set(nx * radius, ny * radius, 3.2);
+    key.color.lerp(targetLightColor, 0.35);
+    const brightCoverage = THREE.MathUtils.clamp(brightWeight / count * 35, 0, 1);
+    const autoKey = THREE.MathUtils.lerp(0.45, 1.65, brightCoverage) * strength;
+    key.intensity += (autoKey - key.intensity) * 0.4;
+  } else {
+    key.intensity *= 0.6;
+  }
   fill.intensity = 0;
 
   if (model) model.traverse((child) => {
