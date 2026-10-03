@@ -1255,9 +1255,9 @@ function updateLiveEnvironment(now) {
     const ctx = c.getContext('2d', { alpha: false });
     ctx.save();
 
-    // Neutral studio base: this is the important safety net that keeps metal
-    // reflective instead of turning black when camera coverage is incomplete.
-    const base = Math.round(255 * ENV_MIN_BRIGHTNESS);
+    // v1.27.7: photo-only IBL. Fill missing coverage with a dark neutral
+    // floor rather than the old studio-like safety light.
+    const base = 10;
     ctx.fillStyle = `rgb(${base}, ${base}, ${base})`;
     ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
@@ -1269,7 +1269,9 @@ function updateLiveEnvironment(now) {
     // Pull live color from the current camera image, but brighten/soften it
     // because it is being used as lighting rather than as a literal screen.
     ctx.globalAlpha = CAMERA_ENV_BLEND;
-    ctx.filter = 'brightness(1.35) saturate(0.92) blur(1.5px)';
+    // Lift exposure while increasing local light-source separation. This keeps
+    // the room's own lighting character instead of mixing in RoomEnvironment.
+    ctx.filter = 'brightness(1.85) contrast(1.32) saturate(1.04) blur(1.2px)';
 
     if (i % 2 === 1) {
       ctx.translate(ENV_SIZE, 0);
@@ -1282,15 +1284,9 @@ function updateLiveEnvironment(now) {
 
     ctx.filter = 'none';
 
-    // Add a soft "window" highlight so chrome/metal always has something bright
-    // to reflect. Camera colors remain visible underneath it.
-    const grad = ctx.createLinearGradient(0, 0, ENV_SIZE, ENV_SIZE);
-    grad.addColorStop(0.0, 'rgba(255,255,255,0.42)');
-    grad.addColorStop(0.35, 'rgba(255,255,255,0.10)');
-    grad.addColorStop(1.0, 'rgba(255,255,255,0.00)');
+    // No synthetic studio/window highlight: bright areas in the actual photo
+    // should become the highlights in the reflection.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
     ctx.restore();
   });
