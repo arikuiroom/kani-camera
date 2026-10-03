@@ -94,6 +94,8 @@ const lightNote = document.getElementById('lightNote');
 const lightMethod = document.getElementById('lightMethod');
 const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
 const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
+const chromeTestBtn = document.getElementById('chromeTestBtn');
+let chromeTestEnabled = false;
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -2104,6 +2106,43 @@ lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
   if (!autoLightingEnabled) setManualLighting();
 });
+chromeTestBtn?.addEventListener('click', () => {
+  chromeTestEnabled = !chromeTestEnabled;
+  chromeTestBtn.textContent = chromeTestEnabled ? 'シルバー解除' : '鏡面シルバー';
+  chromeTestBtn.classList.toggle('active', chromeTestEnabled);
+  if (!model) return;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((mat) => {
+      if (chromeTestEnabled) {
+        if (!mat.userData.chromeBackup) {
+          mat.userData.chromeBackup = {
+            map: mat.map, metalnessMap: mat.metalnessMap, roughnessMap: mat.roughnessMap,
+            metalness: mat.metalness, roughness: mat.roughness, color: mat.color.clone()
+          };
+        }
+        mat.map = null;
+        mat.metalnessMap = null;
+        mat.roughnessMap = null;
+        mat.color.set(0xffffff);
+        mat.metalness = 1;
+        mat.roughness = 0;
+      } else {
+        const b = mat.userData.chromeBackup;
+        if (b) {
+          mat.map = b.map; mat.metalnessMap = b.metalnessMap; mat.roughnessMap = b.roughnessMap;
+          mat.metalness = b.metalness; mat.roughness = b.roughness; mat.color.copy(b.color);
+          delete mat.userData.chromeBackup;
+        }
+      }
+      mat.needsUpdate = true;
+    });
+  });
+  applyRenderQualityMode(renderQualityMode);
+  boostLiveFps();
+});
+
 scanEnvironmentBtn.addEventListener('click', async () => {
   // One compact environment-light cycle:
   // ライブ → 環境光をスキャン → 前面もスキャン → スタジオ → ライブ
