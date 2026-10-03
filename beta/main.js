@@ -994,7 +994,11 @@ function updateAdaptiveLighting(now, instant = false) {
   // Near-black scenes can almost extinguish the studio IBL; bright scenes can
   // push it well above the normal 0.55 reference.
   const matchedIBL = THREE.MathUtils.clamp(0.02 + avgLum * 1.05, 0.02, 0.82);
-  const targetIBL = THREE.MathUtils.lerp(0.55, matchedIBL, strength);
+  const baseIBL = iblSourceState === 'photo' ? 1.65 : 0.55;
+  const matchedPhotoIBL = THREE.MathUtils.clamp(0.55 + avgLum * 2.6, 0.55, 2.8);
+  const targetIBL = iblSourceState === 'photo'
+    ? THREE.MathUtils.lerp(baseIBL, matchedPhotoIBL, strength)
+    : THREE.MathUtils.lerp(0.55, matchedIBL, strength);
 
   // Exaggerated colour-temperature test: make the camera/photo colour cast
   // visibly affect ambient illumination without modifying the albedo itself.
@@ -1394,10 +1398,18 @@ function updateLiveEnvironment(now) {
       const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
       const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
       const si = (iy * sw + ix) * 4;
-      // Keep real contrast; only a modest exposure lift for reflection use.
-      out.data[di] = Math.min(255, data.data[si] * 1.18);
-      out.data[di+1] = Math.min(255, data.data[si+1] * 1.18);
-      out.data[di+2] = Math.min(255, data.data[si+2] * 1.18);
+      // Pseudo-HDR reconstruction from the SDR camera frame.
+      // Keep midtones fairly natural, but boost the brightest pixels much
+      // harder so windows/lamps regain some of their lost lighting energy.
+      const rr = data.data[si] / 255;
+      const gg = data.data[si+1] / 255;
+      const bb = data.data[si+2] / 255;
+      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+      const highlight = THREE.MathUtils.smoothstep(lum, 0.58, 0.96);
+      const gain = 1.15 + highlight * highlight * 2.85;
+      out.data[di] = Math.min(255, Math.pow(rr, 0.92) * gain * 255);
+      out.data[di+1] = Math.min(255, Math.pow(gg, 0.92) * gain * 255);
+      out.data[di+2] = Math.min(255, Math.pow(bb, 0.92) * gain * 255);
       out.data[di+3] = 255;
     };
 
