@@ -88,6 +88,8 @@ const lightAzimuth = document.getElementById('lightAzimuth');
 const lightAzimuthOut = document.getElementById('lightAzimuthOut');
 const lightElevation = document.getElementById('lightElevation');
 const lightElevationOut = document.getElementById('lightElevationOut');
+const lightDirectionPad = document.getElementById('lightDirectionPad');
+const lightDirectionKnob = document.getElementById('lightDirectionKnob');
 const lightNote = document.getElementById('lightNote');
 const lightMethod = document.getElementById('lightMethod');
 const iblSource = document.getElementById('iblSource');
@@ -835,10 +837,21 @@ function setManualLighting() {
   setManualLightPosition();
 }
 
+function updateLightDirectionPad() {
+  if (!lightDirectionPad || !lightDirectionKnob) return;
+  const az = Number(lightAzimuth.value);
+  const el = Number(lightElevation.value);
+  const x = THREE.MathUtils.clamp((az + 180) / 360, 0, 1);
+  const y = THREE.MathUtils.clamp((80 - el) / 140, 0, 1);
+  lightDirectionKnob.style.left = `${x * 100}%`;
+  lightDirectionKnob.style.top = `${y * 100}%`;
+}
+
 function updateLightLabels() {
-  lightPowerOut.textContent = Number(lightPower.value).toFixed(2);
+  lightPowerOut.textContent = Number(lightPower.value).toFixed(1);
   lightAzimuthOut.textContent = `${Math.round(Number(lightAzimuth.value))}°`;
   lightElevationOut.textContent = `${Math.round(Number(lightElevation.value))}°`;
+  updateLightDirectionPad();
 }
 
 function updateLightControlState() {
@@ -846,6 +859,7 @@ function updateLightControlState() {
   lightAzimuth.disabled = autoLightingEnabled;
   lightElevation.disabled = autoLightingEnabled;
   lightPower.disabled = autoLightingEnabled;
+  if (lightDirectionPad) lightDirectionPad.classList.toggle('disabled', autoLightingEnabled);
   lightNote.textContent = autoLightingEnabled
     ? 'AUTOは後で新方式に対応予定です。現在はなじみの明るさ・色追従が動作します。'
     : '方式を選び、左右・上下で光の方向を比較できます。';
@@ -1980,6 +1994,24 @@ lightAzimuth.addEventListener('input', () => {
 lightElevation.addEventListener('input', () => {
   updateLightLabels();
   if (!autoLightingEnabled) setManualLightPosition();
+});
+
+function setLightDirectionFromPointer(e) {
+  if (autoLightingEnabled || !lightDirectionPad) return;
+  const r = lightDirectionPad.getBoundingClientRect();
+  const x = THREE.MathUtils.clamp((e.clientX - r.left) / r.width, 0, 1);
+  const y = THREE.MathUtils.clamp((e.clientY - r.top) / r.height, 0, 1);
+  lightAzimuth.value = String(Math.round(-180 + x * 360));
+  lightElevation.value = String(Math.round(80 - y * 140));
+  updateLightLabels();
+  setManualLightPosition();
+}
+lightDirectionPad?.addEventListener('pointerdown', (e) => {
+  lightDirectionPad.setPointerCapture(e.pointerId);
+  setLightDirectionFromPointer(e);
+});
+lightDirectionPad?.addEventListener('pointermove', (e) => {
+  if (lightDirectionPad.hasPointerCapture(e.pointerId)) setLightDirectionFromPointer(e);
 });
 lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
