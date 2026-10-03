@@ -785,8 +785,18 @@ function setManualLightPosition() {
 
   // Rotate the studio IBL around the model when requested. Three.js applies
   // this rotation to the environment reflection without moving the camera.
-  if ('environmentRotation' in scene) {
-    scene.environmentRotation.set(0, (lightMethodState === 'ibl' || lightMethodState === 'both') ? az : 0, 0);
+  // The studio PMREM is assigned per material (mat.envMap), so rotating
+  // scene.environment does not rotate those reflections. Rotate each
+  // material's envMap instead.
+  const envAngle = (lightMethodState === 'ibl' || lightMethodState === 'both') ? az : 0;
+  if (model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        if (mat && mat.envMapRotation) mat.envMapRotation.set(0, envAngle, 0);
+      });
+    });
   }
 }
 
