@@ -1144,7 +1144,11 @@ function applyRenderQualityMode(mode) {
       } else {
         // B/C use a proper prefiltered image-based lighting environment.
         mat.envMap = studioEnvironment;
-        mat.envMapIntensity = 1.35;
+        // Keep the broad glossy reflection, but lower its energy so saturated
+        // paint keeps its red color instead of clipping toward white on iPhone.
+        // C can stay slightly stronger because clearcoat separates the glossy
+        // top reflection from the colored base layer.
+        mat.envMapIntensity = mode === 'coat' ? 0.92 : 0.82;
       }
 
       if (mat.isMeshPhysicalMaterial) {
