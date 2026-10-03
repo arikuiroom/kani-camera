@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.25.2 beta</title>
+<title>カニギター カメラ v1.26.0 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -812,6 +812,41 @@
         flex-wrap: wrap;
       }
     }
+    #helpOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      background: rgba(0,0,0,.88);
+      pointer-events: auto;
+      align-items: center;
+      justify-content: center;
+      padding: max(56px, calc(env(safe-area-inset-top) + 44px)) 14px max(18px, env(safe-area-inset-bottom));
+    }
+    #helpOverlay.open { display: flex; }
+    #helpOverlay img {
+      display: block;
+      max-width: min(94vw, 720px);
+      max-height: calc(100dvh - max(74px, calc(env(safe-area-inset-top) + 62px)) - max(18px, env(safe-area-inset-bottom)));
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 10px;
+      background: white;
+    }
+    #closeHelpBtn {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 9;
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      background: rgba(0,0,0,.72);
+    }
   </style>
 </head>
 <body>
@@ -837,8 +872,9 @@
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
+      <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.25.2 beta</div>
+      <div class="menu-version">Kani Camera v1.26.0 beta</div>
     </div>
     
     <div id="savePanel" aria-label="保存設定">
@@ -1049,6 +1085,11 @@
     <button id="resetBtn" aria-label="位置を戻す"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 10a9 9 0 1 1-1 11"/><path d="M9 10H4V5"/></svg>リセット</button>
   </div>
 
+  <div id="helpOverlay" aria-label="使い方" role="dialog" aria-modal="true">
+    <img id="helpImage" src="./help-placeholder.svg?v=1.26.0" alt="カニギターカメラの使い方" />
+    <button id="closeHelpBtn" class="panel-close" aria-label="使い方を閉じる">×</button>
+  </div>
+
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-side">
@@ -1071,7 +1112,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.25.2 beta</div>
+      <div class="start-version">Kani Camera v1.26.0 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
