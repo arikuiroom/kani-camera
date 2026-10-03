@@ -2031,7 +2031,7 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     return;
   }
 
-  if (iblSourceState === 'studio' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'スタジオ') {
+  if (iblSourceState === 'studio' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'ライブに戻す') {
     iblSourceState = 'photo';
     lastEnvUpdate = -Infinity;
     lastLightSample = -Infinity;
