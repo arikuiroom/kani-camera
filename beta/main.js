@@ -1148,7 +1148,7 @@ function applyRenderQualityMode(mode) {
         // paint keeps its red color instead of clipping toward white on iPhone.
         // C can stay slightly stronger because clearcoat separates the glossy
         // top reflection from the colored base layer.
-        mat.envMapIntensity = mode === 'coat' ? 0.92 : 0.82;
+        mat.envMapIntensity = mode === 'coat' ? 0.75 : 0.68;
       }
 
       if (mat.isMeshPhysicalMaterial) {
