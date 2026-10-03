@@ -2092,6 +2092,12 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     iblSourceState = 'photo';
     lastEnvUpdate = -Infinity;
     lastLightSample = -Infinity;
+    // Switching the state alone is not enough: existing crab-guitar materials
+    // keep the studio envMap until they are explicitly rebound to liveEnvMap.
+    applyRenderQualityMode(renderQualityMode);
+    updateLiveEnvironment(performance.now());
+    updateAdaptiveLighting(performance.now(), true);
+    if (!autoLightingEnabled) setManualLighting();
     scanEnvironmentStatus.textContent = 'ライブ';
     scanEnvironmentBtn.textContent = 'スキャン';
     return;
