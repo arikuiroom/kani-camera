@@ -2036,6 +2036,13 @@ scanEnvironmentBtn.addEventListener('click', async () => {
   environmentScanFrozen = true;
   scanEnvironmentBtn.textContent = 'スキャン解除';
   scanEnvironmentStatus.textContent = dualScanPhase === 2 ? '前後固定中' : '固定中';
+
+  // After the front-camera capture, return to the normal rear camera while
+  // keeping the scanned lighting frozen.
+  if (inputMode === 'camera' && dualScanPhase === 2 && facingMode !== 'environment') {
+    facingMode = 'environment';
+    await startCamera();
+  }
 });
 
 updateLightLabels();
