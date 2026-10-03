@@ -1983,9 +1983,14 @@ scanEnvironmentBtn.addEventListener('click', () => {
   iblSource.value = 'photo';
   lastEnvUpdate = -Infinity;
   lastLightSample = -Infinity;
-  updateLiveEnvironment(performance.now());
-  updateAdaptiveLighting(performance.now());
+
+  // Select the photo envMap first. applyRenderQualityMode resets IBL intensity
+  // and lights, so it must happen BEFORE sampling the frame; otherwise the
+  // freshly captured brightness gets overwritten and the model goes dark.
   applyRenderQualityMode(renderQualityMode);
+  const scanNow = performance.now();
+  updateLiveEnvironment(scanNow);
+  updateAdaptiveLighting(scanNow);
   environmentScanFrozen = true;
   scanEnvironmentBtn.textContent = 'スキャン解除';
   scanEnvironmentStatus.textContent = '固定中';
