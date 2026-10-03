@@ -377,7 +377,6 @@ let iblPreviewScene = null;
 let iblPreviewCamera = null;
 let iblPreviewMaterial = null;
 let iblPreviewStudioEnvironment = null;
-let iblPreviewLiveEnvMap = null;
 if (iblPreviewCanvas) {
   iblPreviewRenderer = new THREE.WebGLRenderer({ canvas: iblPreviewCanvas, alpha: true, antialias: true });
   iblPreviewRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -401,7 +400,8 @@ if (iblPreviewCanvas) {
     envMap: iblPreviewStudioEnvironment,
     envMapIntensity: 1.0
   });
-  iblPreviewScene.add(new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), iblPreviewMaterial));
+  const previewSphere = new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), iblPreviewMaterial);
+  iblPreviewScene.add(previewSphere);
 }
 
 // v1.13: real-time projected shadow onto a transparent virtual floor.
@@ -1329,12 +1329,6 @@ const envCanvases = Array.from({ length: 6 }, () => {
 const liveEnvMap = new THREE.CubeTexture(envCanvases);
 liveEnvMap.colorSpace = THREE.SRGBColorSpace;
 liveEnvMap.needsUpdate = true;
-// The IBL monitor has its own WebGL context, so it also needs its own
-// CubeTexture object. Both textures read from the same six live canvases.
-iblPreviewLiveEnvMap = new THREE.CubeTexture(envCanvases);
-iblPreviewLiveEnvMap.colorSpace = THREE.SRGBColorSpace;
-iblPreviewLiveEnvMap.needsUpdate = true;
-
 let lastEnvUpdate = 0;
 
 function captureVideoFrameForScan() {
@@ -1412,7 +1406,6 @@ function updateLiveEnvironment(now) {
   });
 
   liveEnvMap.needsUpdate = true;
-  if (iblPreviewLiveEnvMap) iblPreviewLiveEnvMap.needsUpdate = true;
 }
 
 
@@ -1574,9 +1567,18 @@ function render(now = 0) {
 
   renderer.render(scene, camera);
   if (iblPreviewRenderer && iblPreviewMaterial && lightPanel.classList.contains('open')) {
-    iblPreviewMaterial.envMap = iblSourceState === 'photo' ? iblPreviewLiveEnvMap : iblPreviewStudioEnvironment;
-    // needsUpdate can be consumed independently by the two WebGL contexts.
-    if (iblSourceState === 'photo' && iblPreviewLiveEnvMap) iblPreviewLiveEnvMap.needsUpdate = true;
+    if (iblSourceState === 'photo') {
+      // Recreate the tiny CubeTexture in this renderer when the live canvases change.
+      // This is cheap (6 x 64px) and avoids cross-context texture caching on iOS Safari.
+      const previewCube = new THREE.CubeTexture(envCanvases);
+      previewCube.colorSpace = THREE.SRGBColorSpace;
+      previewCube.needsUpdate = true;
+      const oldMap = iblPreviewMaterial.envMap;
+      iblPreviewMaterial.envMap = previewCube;
+      if (oldMap && oldMap !== iblPreviewStudioEnvironment) oldMap.dispose();
+    } else {
+      iblPreviewMaterial.envMap = iblPreviewStudioEnvironment;
+    }
     if (iblPreviewMaterial.envMapRotation) {
       const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
       iblPreviewMaterial.envMapRotation.set(
