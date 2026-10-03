@@ -788,13 +788,17 @@ function setManualLightPosition() {
   // The studio PMREM is assigned per material (mat.envMap), so rotating
   // scene.environment does not rotate those reflections. Rotate each
   // material's envMap instead.
-  const envAngle = (lightMethodState === 'ibl' || lightMethodState === 'both') ? az : 0;
+  const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
+  const envAzimuth = useIblRotation ? az : 0;
+  const envElevation = useIblRotation ? el : 0;
   if (model) {
     model.traverse((child) => {
       if (!child.isMesh || !child.material) return;
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach((mat) => {
-        if (mat && mat.envMapRotation) mat.envMapRotation.set(0, envAngle, 0);
+        // envMapRotation is Euler XYZ: X tilts the environment up/down,
+        // Y turns it left/right around the model.
+        if (mat && mat.envMapRotation) mat.envMapRotation.set(envElevation, envAzimuth, 0);
       });
     });
   }
