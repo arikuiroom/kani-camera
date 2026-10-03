@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+<rect width="1080" height="1920" fill="#fff"/>
+<g font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue','Noto Sans JP',sans-serif" fill="#111">
+<text x="540" y="190" text-anchor="middle" font-size="70" font-weight="700">カニギターカメラ</text>
+<text x="540" y="280" text-anchor="middle" font-size="48" font-weight="600">使い方（仮画像）</text>
+<line x1="110" y1="350" x2="970" y2="350" stroke="#ddd" stroke-width="3"/>
+<text x="120" y="480" font-size="42" font-weight="700">カニギターの操作</text>
+<text x="150" y="575" font-size="38">1本指ドラッグ　　3D回転</text>
+<text x="150" y="655" font-size="38">2本指ドラッグ　　移動</text>
+<text x="150" y="735" font-size="38">2本指ピンチ　　　拡大・縮小</text>
+<text x="150" y="815" font-size="38">2本指でひねる　　画面内で回転</text>
+<text x="120" y="990" font-size="42" font-weight="700">調整</text>
+<text x="150" y="1085" font-size="36">パース　　遠近感を合わせる</text>
+<text x="150" y="1155" font-size="36">なじみ　　背景の色や雰囲気になじませる</text>
+<text x="150" y="1225" font-size="36">照明　　　光の方向・明るさを調整</text>
+<text x="150" y="1295" font-size="36">丸影　　　簡単な影をつける</text>
+<text x="150" y="1365" font-size="36">床　　　　床面に沿った影をつける</text>
+<line x1="110" y1="1480" x2="970" y2="1480" stroke="#ddd" stroke-width="3"/>
+<text x="540" y="1600" text-anchor="middle" font-size="34" fill="#777">この画像は仮画像です</text>
+<text x="540" y="1660" text-anchor="middle" font-size="34" fill="#777">完成版PNGに差し替えて使用します</text>
+</g></svg>
