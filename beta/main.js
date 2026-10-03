@@ -89,6 +89,7 @@ const lightAzimuthOut = document.getElementById('lightAzimuthOut');
 const lightElevation = document.getElementById('lightElevation');
 const lightElevationOut = document.getElementById('lightElevationOut');
 const lightNote = document.getElementById('lightNote');
+const lightMethod = document.getElementById('lightMethod');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -762,6 +763,7 @@ lightSampleCanvas.height = 24;
 const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: true });
 let lastLightSample = 0;
 let autoLightingEnabled = true;
+let lightMethodState = 'both';
 let blendEnabledState = true;
 let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
@@ -780,15 +782,24 @@ function setManualLightPosition() {
     Math.sin(el) * radius,
     Math.cos(az) * cosEl * radius
   );
+
+  // Rotate the studio IBL around the model when requested. Three.js applies
+  // this rotation to the environment reflection without moving the camera.
+  if ('environmentRotation' in scene) {
+    scene.environmentRotation.set(0, (lightMethodState === 'ibl' || lightMethodState === 'both') ? az : 0, 0);
+  }
 }
 
 function setManualLighting() {
-  // B/C deliberately use IBL as their lighting source. Keep the legacy
-  // adjustment lights completely out of the comparison.
+  // v1.27.3 direction experiment: the slider can rotate the IBL, add a
+  // directional key light, or do both. Keep the key deliberately restrained.
   if (renderQualityMode !== 'current') {
-    key.intensity = 0;
+    const power = Number(lightPower.value);
+    key.color.set(0xffffff);
+    key.intensity = (lightMethodState === 'light' || lightMethodState === 'both') ? power * 0.28 : 0;
     fill.intensity = 0;
-    hemi.intensity = 0;
+    hemi.intensity = blendEnabledState ? 0.38 * blendStrengthState : 0;
+    setManualLightPosition();
     return;
   }
   const power = Number(lightPower.value);
@@ -814,8 +825,8 @@ function updateLightControlState() {
   lightElevation.disabled = autoLightingEnabled;
   lightPower.disabled = autoLightingEnabled;
   lightNote.textContent = autoLightingEnabled
-    ? 'AUTO中は、カメラ映像の平均色・明るさ・明るい方向を照明に反映します。'
-    : '手動中は、明るさと光の方向を自由に調整できます。';
+    ? 'AUTOは後で新方式に対応予定です。現在はなじみの明るさ・色追従が動作します。'
+    : '方式を選び、左右・上下で光の方向を比較できます。';
   if (!autoLightingEnabled) setManualLighting();
 }
 
@@ -1887,6 +1898,10 @@ lightAzimuth.addEventListener('input', () => {
 lightElevation.addEventListener('input', () => {
   updateLightLabels();
   if (!autoLightingEnabled) setManualLightPosition();
+});
+lightMethod.addEventListener('change', () => {
+  lightMethodState = lightMethod.value;
+  if (!autoLightingEnabled) setManualLighting();
 });
 
 updateLightLabels();
