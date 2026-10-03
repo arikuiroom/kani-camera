@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.29.2 beta</title>
+<title>カニギター カメラ v1.30.0 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -490,6 +490,33 @@
       font-size: 18px;
     }
     .light-row input[type="range"] { width: 100%; pointer-events: auto; touch-action: pan-x; }
+    .light-direction-wrap { margin-top: 8px; }
+    .light-direction-label { font-size: 14px; margin-bottom: 5px; opacity: .9; }
+    .light-direction-pad {
+      position: relative;
+      width: 100%;
+      height: 112px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.18);
+      touch-action: none;
+      overflow: hidden;
+    }
+    .light-direction-pad.disabled { opacity: .4; pointer-events: none; }
+    .dir-cross-x, .dir-cross-y { position:absolute; background:rgba(255,255,255,.16); pointer-events:none; }
+    .dir-cross-x { left:0; right:0; top:50%; height:1px; }
+    .dir-cross-y { top:0; bottom:0; left:50%; width:1px; }
+    .dir-label { position:absolute; font-size:11px; opacity:.55; pointer-events:none; }
+    .dir-top { top:5px; left:50%; transform:translateX(-50%); }
+    .dir-bottom { bottom:5px; left:50%; transform:translateX(-50%); }
+    .dir-left { left:7px; top:50%; transform:translateY(-50%); }
+    .dir-right { right:7px; top:50%; transform:translateY(-50%); }
+    .light-direction-knob {
+      position:absolute; width:26px; height:26px; border-radius:50%;
+      background:white; border:3px solid rgba(0,0,0,.28);
+      box-shadow:0 2px 8px rgba(0,0,0,.28);
+      transform:translate(-50%,-50%); pointer-events:none;
+    }
     .light-row output {
       text-align: right;
       font-variant-numeric: tabular-nums;
@@ -895,7 +922,7 @@
       <button id="renderCompareBtn" style="display:none">画質比較</button>
       <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.29.2 beta</div>
+      <div class="menu-version">Kani Camera v1.30.0 beta</div>
     </div>
     
     <div id="renderComparePanel" aria-label="画質比較">
@@ -979,16 +1006,22 @@
         <input id="lightPower" type="range" min="0" max="10" step="0.1" value="2.2" />
         <output id="lightPowerOut">2.20</output>
       </div>
-      <div class="light-row">
-        <label for="lightAzimuth">左右</label>
-        <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" />
-        <output id="lightAzimuthOut">27°</output>
+      <div class="light-direction-wrap">
+        <div class="light-direction-label">照明方向</div>
+        <div id="lightDirectionPad" class="light-direction-pad" aria-label="照明方向">
+          <span class="dir-label dir-top">上</span>
+          <span class="dir-label dir-left">左</span>
+          <span class="dir-label dir-right">右</span>
+          <span class="dir-label dir-bottom">下</span>
+          <div class="dir-cross-x"></div>
+          <div class="dir-cross-y"></div>
+          <div id="lightDirectionKnob" class="light-direction-knob"></div>
+        </div>
       </div>
-      <div class="light-row">
-        <label for="lightElevation">上下</label>
-        <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" />
-        <output id="lightElevationOut">31°</output>
-      </div>
+      <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" hidden />
+      <output id="lightAzimuthOut" hidden>27°</output>
+      <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" hidden />
+      <output id="lightElevationOut" hidden>31°</output>
       <p id="lightNote" class="light-note" style="display:none"></p>
     </div>
     <div id="fovPanel" aria-label="FOV設定">
@@ -1166,7 +1199,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.29.2 beta</div>
+      <div class="start-version">Kani Camera v1.30.0 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
