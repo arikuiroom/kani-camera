@@ -91,6 +91,8 @@ const lightElevationOut = document.getElementById('lightElevationOut');
 const lightNote = document.getElementById('lightNote');
 const lightMethod = document.getElementById('lightMethod');
 const iblSource = document.getElementById('iblSource');
+const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
+const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -766,6 +768,7 @@ let lastLightSample = 0;
 let autoLightingEnabled = true;
 let lightMethodState = 'both';
 let iblSourceState = 'studio';
+let environmentScanFrozen = false;
 let blendEnabledState = true;
 let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
@@ -1480,8 +1483,10 @@ function render(now = 0) {
   if (now - lastLiveFrame < frameInterval) return;
   lastLiveFrame = now - ((now - lastLiveFrame) % frameInterval);
 
-  updateLiveEnvironment(now);
-  updateAdaptiveLighting(now);
+  if (!environmentScanFrozen) {
+    updateLiveEnvironment(now);
+    updateAdaptiveLighting(now);
+  }
 
   // Shadow systems are normally off. Avoid their per-frame transforms and
   // model bounds traversal unless the user is actually using them.
@@ -1957,10 +1962,33 @@ lightMethod.addEventListener('change', () => {
 });
 iblSource.addEventListener('change', () => {
   iblSourceState = iblSource.value;
-  // Reuse the existing camera-derived cube map as a first pseudo-IBL experiment.
-  // It is updated from the visible background and intentionally softened.
+  environmentScanFrozen = false;
+  scanEnvironmentBtn.textContent = '環境光をスキャン';
+  scanEnvironmentStatus.textContent = '未固定';
   applyRenderQualityMode(renderQualityMode);
   if (!autoLightingEnabled) setManualLighting();
+});
+
+scanEnvironmentBtn.addEventListener('click', () => {
+  if (environmentScanFrozen) {
+    environmentScanFrozen = false;
+    scanEnvironmentBtn.textContent = '環境光をスキャン';
+    scanEnvironmentStatus.textContent = 'ライブ';
+    return;
+  }
+
+  // Capture one complete lighting state from the current camera/photo frame,
+  // then stop updating it while the user composes the shot.
+  iblSourceState = 'photo';
+  iblSource.value = 'photo';
+  lastEnvUpdate = -Infinity;
+  lastLightSample = -Infinity;
+  updateLiveEnvironment(performance.now());
+  updateAdaptiveLighting(performance.now());
+  applyRenderQualityMode(renderQualityMode);
+  environmentScanFrozen = true;
+  scanEnvironmentBtn.textContent = 'スキャン解除';
+  scanEnvironmentStatus.textContent = '固定中';
 });
 
 updateLightLabels();
