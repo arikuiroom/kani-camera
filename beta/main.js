@@ -783,6 +783,14 @@ function setManualLightPosition() {
 }
 
 function setManualLighting() {
+  // B/C deliberately use IBL as their lighting source. Keep the legacy
+  // adjustment lights completely out of the comparison.
+  if (renderQualityMode !== 'current') {
+    key.intensity = 0;
+    fill.intensity = 0;
+    hemi.intensity = 0;
+    return;
+  }
   const power = Number(lightPower.value);
   key.color.set(0xffffff);
   fill.color.set(0xffffff);
@@ -859,6 +867,9 @@ function resetBackgroundBlend() {
 }
 
 function updateAdaptiveLighting(now) {
+  // A keeps the existing "なじみ" and "照明" behaviour. B/C are isolated
+  // from both systems so their appearance comes from IBL / clearcoat only.
+  if (renderQualityMode !== 'current') return;
   const source = getActiveBackgroundSource();
   if (!source) return;
   if (!autoLightingEnabled && !blendEnabledState) return;
@@ -1158,6 +1169,26 @@ function applyRenderQualityMode(mode) {
       mat.needsUpdate = true;
     });
   });
+  // Isolate B/C from the legacy lighting/blending controls. Returning to A
+  // immediately restores their current settings rather than changing them.
+  if (mode === 'current') {
+    if (blendEnabledState) {
+      lastLightSample = 0;
+    } else {
+      resetBackgroundBlend();
+    }
+    if (autoLightingEnabled) {
+      lastLightSample = 0;
+    } else {
+      setManualLighting();
+    }
+  } else {
+    resetBackgroundBlend();
+    key.intensity = 0;
+    fill.intensity = 0;
+    hemi.intensity = 0;
+  }
+
   renderChoices.forEach((btn) => btn.classList.toggle('active', btn.dataset.renderMode === mode));
   statusEl.textContent = mode === 'current'
     ? '画質 A：現在'
