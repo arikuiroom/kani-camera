@@ -1332,7 +1332,7 @@ const envCanvases = Array.from({ length: 6 }, () => {
   return c;
 });
 
-const liveEnvMap = new THREE.CubeTexture(envCanvases);
+let liveEnvMap = new THREE.CubeTexture(envCanvases);
 liveEnvMap.colorSpace = THREE.SRGBColorSpace;
 liveEnvMap.needsUpdate = true;
 let lastEnvUpdate = 0;
@@ -1450,7 +1450,25 @@ function updateLiveEnvironment(now) {
     ctx.restore();
   });
 
+  // iOS Safari does not reliably refresh a CubeTexture whose canvas faces
+  // are mutated in place. Recreate the texture object, just like the working
+  // IBL preview renderer does.
+  const previousLiveEnvMap = liveEnvMap;
+  liveEnvMap = new THREE.CubeTexture(envCanvases);
+  liveEnvMap.colorSpace = THREE.SRGBColorSpace;
   liveEnvMap.needsUpdate = true;
+
+  if (iblSourceState === 'photo' && model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        mat.envMap = liveEnvMap;
+        mat.needsUpdate = true;
+      });
+    });
+  }
+  if (previousLiveEnvMap) previousLiveEnvMap.dispose();
 }
 
 
