@@ -88,8 +88,6 @@ const lightAzimuthOut = document.getElementById('lightAzimuthOut');
 const lightElevation = document.getElementById('lightElevation');
 const lightElevationOut = document.getElementById('lightElevationOut');
 const lightNote = document.getElementById('lightNote');
-const moveModeBtn = document.getElementById('moveModeBtn');
-const rotateModeBtn = document.getElementById('rotateModeBtn');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -113,7 +111,6 @@ let stream = null;
 let photoObjectUrl = null;
 let model = null;
 let modelVisible = true;
-let interactionMode = 'move';
 let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
@@ -1375,11 +1372,10 @@ resetBtn.addEventListener('click', () => {
   // Reset everything outside the Settings menu. Settings-menu items
   // (input source, crab-guitar color/visibility, save format) are preserved.
 
-  // Crab guitar transform + interaction mode.
+  // Crab guitar transform.
   model.position.set(0, 0, 0);
   model.rotation.set(0.05, -0.2, -0.12);
   model.scale.setScalar(initialModelScale);
-  setInteractionMode('move');
 
   // Perspective.
   camera.fov = DEFAULT_FOV;
@@ -1798,23 +1794,17 @@ ensureVirtualFloor();
 ensureGroundShadow();
 updateGroundShadow();
 
-function setInteractionMode(mode) {
-  interactionMode = mode;
-  const moving = mode === 'move';
-  moveModeBtn.classList.toggle('active', moving);
-  rotateModeBtn.classList.toggle('active', !moving);
-  statusEl.textContent = moving ? '移動モード' : '3D回転モード';
-}
-
-moveModeBtn.addEventListener('click', () => setInteractionMode('move'));
-rotateModeBtn.addEventListener('click', () => setInteractionMode('rotate'));
-
-// Touch gestures:
-// 1 finger = move OR 3D rotate, depending on selected mode
-// 2 fingers = pinch scale + rotate around screen Z axis
+// Direct touch gestures:
+// 1 finger = screen-relative 3D rotation
+// 2 fingers = center movement + pinch scale + screen-relative twist
+// The three two-finger components are applied together, so no mode switch is needed.
 const touches = new Map();
 let gestureStart = null;
 let floorDragPointerId = null;
+const TWO_FINGER_MOVE_DEADZONE = 1.5;
+const TWO_FINGER_PINCH_START_RATIO = 0.045; // 4.5% from the initial finger spacing
+const TWO_FINGER_TWIST_DEADZONE = THREE.MathUtils.degToRad(0.35);
+let pinchGesture = null;
 
 canvas.addEventListener('pointerdown', (e) => {
   boostLiveFps();
@@ -1826,6 +1816,13 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   gestureStart = snapshotGesture();
+  if (gestureStart) {
+    pinchGesture = {
+      startDistance: gestureStart.distance,
+      lastDistance: gestureStart.distance,
+      active: false
+    };
+  }
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -1839,52 +1836,68 @@ canvas.addEventListener('pointermove', (e) => {
     const dx = e.clientX - prev.x;
     const dy = e.clientY - prev.y;
 
-    if (interactionMode === 'move') {
-      const k = 0.0045;
-      model.position.x += dx * k;
-      model.position.y -= dy * k;
-    } else {
-      // Screen-relative 3D rotation.
-      // Horizontal drag rotates around the screen's vertical axis, while
-      // vertical drag rotates around the screen's horizontal axis.
-      // Premultiplying keeps these axes camera/screen-relative regardless of
-      // the model's current orientation or any previous two-finger twist.
-      const rotateSpeed = 0.010;
-      const screenRight = new THREE.Vector3(1, 0, 0)
-        .applyQuaternion(camera.quaternion)
-        .normalize();
-      const screenUp = new THREE.Vector3(0, 1, 0)
-        .applyQuaternion(camera.quaternion)
-        .normalize();
-      const yaw = new THREE.Quaternion()
-        // Horizontal drag direction restored after device test:
-        // dragging right uses positive rotation around the screen-up axis.
-        .setFromAxisAngle(screenUp, dx * rotateSpeed);
-      const pitch = new THREE.Quaternion()
-        .setFromAxisAngle(screenRight, dy * rotateSpeed);
-      model.quaternion.premultiply(yaw);
-      model.quaternion.premultiply(pitch);
-    }
+    // Screen-relative 3D rotation.
+    const rotateSpeed = 0.010;
+    const screenRight = new THREE.Vector3(1, 0, 0)
+      .applyQuaternion(camera.quaternion)
+      .normalize();
+    const screenUp = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(camera.quaternion)
+      .normalize();
+    const yaw = new THREE.Quaternion()
+      .setFromAxisAngle(screenUp, dx * rotateSpeed);
+    const pitch = new THREE.Quaternion()
+      .setFromAxisAngle(screenRight, dy * rotateSpeed);
+    model.quaternion.premultiply(yaw);
+    model.quaternion.premultiply(pitch);
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
     if (gestureStart && current) {
-      const scaleFactor = current.distance / gestureStart.distance;
-      model.scale.multiplyScalar(scaleFactor);
+      // Translate by the movement of the midpoint between the two fingers.
+      // Match the old one-finger move sensitivity.
+      const moveDx = current.centerX - gestureStart.centerX;
+      const moveDy = current.centerY - gestureStart.centerY;
+      if (Math.hypot(moveDx, moveDy) >= TWO_FINGER_MOVE_DEADZONE) {
+        const moveSpeed = 0.0045;
+        model.position.x += moveDx * moveSpeed;
+        model.position.y -= moveDy * moveSpeed;
+      }
 
-      // Two-finger twist is screen-relative, not model-local.
-      // Rotate around the camera viewing axis expressed in world space, while
-      // keeping the crab-guitar center fixed. This remains intuitive even
-      // after the model has been turned sideways or backwards.
+      // Scale only after the finger spacing has changed clearly enough from
+      // the beginning of this two-finger gesture. Small spacing changes caused
+      // by translating or twisting are ignored, preventing "breathing" size.
+      if (!pinchGesture) {
+        pinchGesture = {
+          startDistance: gestureStart.distance,
+          lastDistance: gestureStart.distance,
+          active: false
+        };
+      }
+      if (!pinchGesture.active) {
+        const pinchRatio = Math.abs(current.distance / pinchGesture.startDistance - 1);
+        if (pinchRatio >= TWO_FINGER_PINCH_START_RATIO) {
+          pinchGesture.active = true;
+          // Start scaling from this point so crossing the threshold never jumps.
+          pinchGesture.lastDistance = current.distance;
+        }
+      } else {
+        const scaleFactor = current.distance / Math.max(1, pinchGesture.lastDistance);
+        model.scale.multiplyScalar(scaleFactor);
+        pinchGesture.lastDistance = current.distance;
+      }
+
+      // Two-finger twist around the camera viewing axis.
       let twistDelta = current.angle - gestureStart.angle;
-      // Keep atan2 wrap-around from causing a sudden near-360-degree jump.
       if (twistDelta > Math.PI) twistDelta -= Math.PI * 2;
       if (twistDelta < -Math.PI) twistDelta += Math.PI * 2;
-      const screenAxis = new THREE.Vector3(0, 0, 1)
-        .applyQuaternion(camera.quaternion)
-        .normalize();
-      const screenTwist = new THREE.Quaternion()
-        .setFromAxisAngle(screenAxis, -twistDelta);
-      model.quaternion.premultiply(screenTwist);
+      if (Math.abs(twistDelta) >= TWO_FINGER_TWIST_DEADZONE) {
+        const screenAxis = new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(camera.quaternion)
+          .normalize();
+        const screenTwist = new THREE.Quaternion()
+          .setFromAxisAngle(screenAxis, -twistDelta);
+        model.quaternion.premultiply(screenTwist);
+      }
 
       gestureStart = current;
     }
@@ -1895,7 +1908,21 @@ function endPointer(e) {
   if (floorDragPointerId === e.pointerId) floorDragPointerId = null;
   touches.delete(e.pointerId);
   gestureStart = snapshotGesture();
-  boostLiveFps();
+  pinchGesture = gestureStart ? {
+    startDistance: gestureStart.distance,
+    lastDistance: gestureStart.distance,
+    active: false
+  } : null;
+
+  // While a finger remains down, keep the interaction frame rate active.
+  // Once every finger is released, drop straight back to the idle frame rate
+  // instead of keeping the old 500 ms high-FPS tail. This reduces unnecessary
+  // GPU work after repeated direct gestures on iPhone.
+  if (touches.size > 0) {
+    boostLiveFps();
+  } else {
+    interactionBoostUntil = 0;
+  }
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -1906,6 +1933,8 @@ function snapshotGesture() {
   const dx = pts[1].x - pts[0].x;
   const dy = pts[1].y - pts[0].y;
   return {
+    centerX: (pts[0].x + pts[1].x) * 0.5,
+    centerY: (pts[0].y + pts[1].y) * 0.5,
     distance: Math.max(1, Math.hypot(dx, dy)),
     angle: Math.atan2(dy, dx)
   };
