@@ -896,7 +896,7 @@ function resetBackgroundBlend() {
   });
 }
 
-function updateAdaptiveLighting(now) {
+function updateAdaptiveLighting(now, instant = false) {
   // v1.27.1 hybrid "なじみ": keep the clean studio PMREM/Clearcoat look,
   // but let the real camera/photo gently influence IBL brightness and colour.
   // The albedo itself is never tinted.
@@ -963,7 +963,8 @@ function updateAdaptiveLighting(now) {
   const photoFill = iblSourceState === 'photo'
     ? THREE.MathUtils.lerp(0.30, 0.82, THREE.MathUtils.clamp(avgLum * 1.8, 0, 1))
     : 0.38 * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0);
-  hemi.intensity += (photoFill * strength - hemi.intensity) * 0.35;
+  const targetHemi = photoFill * strength;
+  hemi.intensity = instant ? targetHemi : hemi.intensity + (targetHemi - hemi.intensity) * 0.35;
 
   // v1.27.9 AUTO key-light experiment. For photo IBL, a bright window,
   // monitor or ceiling lamp becomes a directional key from the same screen
@@ -979,7 +980,7 @@ function updateAdaptiveLighting(now) {
     key.color.lerp(targetLightColor, 0.35);
     const brightCoverage = THREE.MathUtils.clamp(brightWeight / count * 35, 0, 1);
     const autoKey = THREE.MathUtils.lerp(0.45, 1.65, brightCoverage) * strength;
-    key.intensity += (autoKey - key.intensity) * 0.4;
+    key.intensity = instant ? autoKey : key.intensity + (autoKey - key.intensity) * 0.4;
   } else {
     key.intensity *= 0.6;
   }
@@ -991,7 +992,7 @@ function updateAdaptiveLighting(now) {
     for (const mat of mats) {
       if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
         mat.color.setRGB(1, 1, 1);
-        mat.envMapIntensity += (targetIBL - mat.envMapIntensity) * 0.55;
+        mat.envMapIntensity = instant ? targetIBL : mat.envMapIntensity + (targetIBL - mat.envMapIntensity) * 0.55;
       }
     }
   });
@@ -1990,7 +1991,7 @@ scanEnvironmentBtn.addEventListener('click', () => {
   applyRenderQualityMode(renderQualityMode);
   const scanNow = performance.now();
   updateLiveEnvironment(scanNow);
-  updateAdaptiveLighting(scanNow);
+  updateAdaptiveLighting(scanNow, true);
   environmentScanFrozen = true;
   scanEnvironmentBtn.textContent = 'スキャン解除';
   scanEnvironmentStatus.textContent = '固定中';
