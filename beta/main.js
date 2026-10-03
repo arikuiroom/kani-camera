@@ -90,6 +90,7 @@ const lightElevation = document.getElementById('lightElevation');
 const lightElevationOut = document.getElementById('lightElevationOut');
 const lightNote = document.getElementById('lightNote');
 const lightMethod = document.getElementById('lightMethod');
+const iblSource = document.getElementById('iblSource');
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -764,6 +765,7 @@ const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: 
 let lastLightSample = 0;
 let autoLightingEnabled = true;
 let lightMethodState = 'both';
+let iblSourceState = 'studio';
 let blendEnabledState = true;
 let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
@@ -1172,7 +1174,7 @@ function applyRenderQualityMode(mode) {
         mat.envMapIntensity = ENV_REFLECTION_INTENSITY;
       } else {
         // B/C use a proper prefiltered image-based lighting environment.
-        mat.envMap = studioEnvironment;
+        mat.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
         // Keep the broad glossy reflection, but lower its energy so saturated
         // paint keeps its red color instead of clipping toward white on iPhone.
         // C can stay slightly stronger because clearcoat separates the glossy
@@ -1915,6 +1917,13 @@ lightElevation.addEventListener('input', () => {
 });
 lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
+  if (!autoLightingEnabled) setManualLighting();
+});
+iblSource.addEventListener('change', () => {
+  iblSourceState = iblSource.value;
+  // Reuse the existing camera-derived cube map as a first pseudo-IBL experiment.
+  // It is updated from the visible background and intentionally softened.
+  applyRenderQualityMode(renderQualityMode);
   if (!autoLightingEnabled) setManualLighting();
 });
 
