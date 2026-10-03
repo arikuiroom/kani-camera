@@ -97,6 +97,10 @@ const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave')
 const closePreview = document.getElementById('closePreview');
 const saveHelp = document.getElementById('saveHelp');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const renderCompareBtn = document.getElementById('renderCompareBtn');
+const renderComparePanel = document.getElementById('renderComparePanel');
+const closeRenderCompareBtn = document.getElementById('closeRenderCompareBtn');
+const renderChoices = [...document.querySelectorAll('.render-choice')];
 const helpBtn = document.getElementById('helpBtn');
 const helpOverlay = document.getElementById('helpOverlay');
 const closeHelpBtn = document.getElementById('closeHelpBtn');
@@ -961,6 +965,7 @@ function closeTopPanels() {
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
   savePanel.classList.remove('open');
+  renderComparePanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -1089,6 +1094,43 @@ const CAMERA_ENV_BLEND = 0.68;
 const ENV_REFLECTION_INTENSITY = 1.15;
 const METALNESS_GAIN = 0.88;
 const ENV_MIN_BRIGHTNESS = 0.34;
+
+// v1.26.1 visual A/B/C experiment.
+// A preserves the production look. B makes the existing live environment
+// reflection brighter and sharper. C adds a clear top coat like glossy paint.
+let renderQualityMode = 'current';
+function applyRenderQualityMode(mode) {
+  renderQualityMode = mode;
+  if (!model) return;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((oldMat, index) => {
+      if (!oldMat.isMeshStandardMaterial && !oldMat.isMeshPhysicalMaterial) return;
+      let mat = oldMat;
+      const wantsCoat = mode === 'coat';
+      if (wantsCoat && !oldMat.isMeshPhysicalMaterial) {
+        mat = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(mat, oldMat);
+        mat.clearcoat = 0.72;
+        mat.clearcoatRoughness = 0.16;
+        if (Array.isArray(child.material)) child.material[index] = mat;
+        else child.material = mat;
+        oldMat.dispose();
+      } else if (!wantsCoat && oldMat.isMeshPhysicalMaterial) {
+        mat = new THREE.MeshStandardMaterial();
+        mat.copy(oldMat);
+        if (Array.isArray(child.material)) child.material[index] = mat;
+        else child.material = mat;
+        oldMat.dispose();
+      }
+      mat.envMapIntensity = mode === 'current' ? ENV_REFLECTION_INTENSITY : 1.75;
+      mat.needsUpdate = true;
+    });
+  });
+  renderChoices.forEach((btn) => btn.classList.toggle('active', btn.dataset.renderMode === mode));
+  statusEl.textContent = mode === 'current' ? '画質 A：現在' : mode === 'ibl' ? '画質 B：反射強化' : '画質 C：反射＋クリアコート';
+}
 
 // ---- Pseudo live environment reflection ----------------------------------
 // The phone camera is only a forward-facing image, not a true 360° environment.
@@ -1266,6 +1308,7 @@ loader.load(
     updateVirtualFloor();
     updateShadowFromDirectControls();
 
+    applyRenderQualityMode(renderQualityMode);
     statusEl.textContent = 'カニギター準備完了';
     setTimeout(() => { hint.style.opacity = '0'; }, 3500);
   },
@@ -1952,6 +1995,14 @@ closeHelpBtn.addEventListener('click', () => helpOverlay.classList.remove('open'
 helpOverlay.addEventListener('click', (e) => {
   if (e.target === helpOverlay) helpOverlay.classList.remove('open');
 });
+
+renderCompareBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  renderComparePanel.classList.add('open');
+});
+closeRenderCompareBtn.addEventListener('click', () => renderComparePanel.classList.remove('open'));
+renderChoices.forEach((btn) => btn.addEventListener('click', () => applyRenderQualityMode(btn.dataset.renderMode)));
 
 saveSettingsBtn.addEventListener('click', () => {
   morePanel.classList.remove('open');
