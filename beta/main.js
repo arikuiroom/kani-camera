@@ -1364,44 +1364,69 @@ function updateLiveEnvironment(now) {
     ctx.fillStyle = `rgb(${base}, ${base}, ${base})`;
     ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
-    // Treat one camera image as a wide hemisphere rather than cloning the
-    // same square crop onto all six cube faces. Each cube face samples a
-    // different horizontal sector of the source image.
+    // True two-hemisphere projection. For every cube-face pixel, calculate
+    // its 3D direction, decide which hemisphere it belongs to, then sample the
+    // corresponding camera image with a fisheye-like azimuth/elevation mapping.
     ctx.globalAlpha = 1;
-    ctx.filter = 'brightness(1.18) contrast(1.12) saturate(1.02)';
+    ctx.filter = 'none';
 
-    const drawHemisphereFace = (img, sm, faceIndex, mirror = false) => {
-      const cropH = sm.height;
-      const sectorW = sm.width * 0.58;
-      const centers = [0.18, 0.50, 0.82];
-      const sector = faceIndex % 3;
-      const cx = sm.width * centers[sector];
-      const sw = Math.min(sm.width, sectorW);
-      const sx = Math.max(0, Math.min(sm.width - sw, cx - sw * 0.5));
-      if (mirror) {
-        ctx.translate(ENV_SIZE, 0);
-        ctx.scale(-1, 1);
-      }
-      ctx.drawImage(img, sx, 0, sw, cropH, 0, 0, ENV_SIZE, ENV_SIZE);
-      if (mirror) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const faceDirections = [
+      (u,v) => [ 1, -v, -u], // +X
+      (u,v) => [-1, -v,  u], // -X
+      (u,v) => [ u,  1,  v], // +Y
+      (u,v) => [ u, -1, -v], // -Y
+      (u,v) => [ u, -v,  1], // +Z
+      (u,v) => [-u, -v, -1]  // -Z
+    ];
+    const out = ctx.createImageData(ENV_SIZE, ENV_SIZE);
+    const rearCtx = rearScanImage?.getContext?.('2d', { willReadFrequently: true });
+    const rearData = rearCtx ? rearCtx.getImageData(0, 0, rearScanImage.width, rearScanImage.height) : null;
+    const temp = document.createElement('canvas');
+    temp.width = metrics.width;
+    temp.height = metrics.height;
+    const tempCtx = temp.getContext('2d', { willReadFrequently: true });
+    tempCtx.drawImage(source, 0, 0, metrics.width, metrics.height);
+    const liveData = tempCtx.getImageData(0, 0, metrics.width, metrics.height);
+
+    const sample = (data, sw, sh, x, y, di) => {
+      const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
+      const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
+      const si = (iy * sw + ix) * 4;
+      // Keep real contrast; only a modest exposure lift for reflection use.
+      out.data[di] = Math.min(255, data.data[si] * 1.18);
+      out.data[di+1] = Math.min(255, data.data[si+1] * 1.18);
+      out.data[di+2] = Math.min(255, data.data[si+2] * 1.18);
+      out.data[di+3] = 255;
     };
 
-    if (dualScanPhase === 2 && rearScanImage) {
-      // Rear capture = one hemisphere, front capture = the opposite hemisphere.
-      // Three adjacent cube faces are cut from each image instead of repeating
-      // one identical crop six times.
-      const useRear = i < 3;
-      const scanSource = useRear ? rearScanImage : source;
-      const sm = useRear
-        ? { width: rearScanImage.width, height: rearScanImage.height }
-        : metrics;
-      drawHemisphereFace(scanSource, sm, i, !useRear);
-    } else {
-      // Live mode has only one view, but still distribute different sectors
-      // across the cube so reflections remain spatially readable.
-      drawHemisphereFace(source, metrics, i, i >= 3);
+    for (let py = 0; py < ENV_SIZE; py++) {
+      const v = (py + 0.5) / ENV_SIZE * 2 - 1;
+      for (let px = 0; px < ENV_SIZE; px++) {
+        const u = (px + 0.5) / ENV_SIZE * 2 - 1;
+        let [dx,dy,dz] = faceDirections[i](u,v);
+        const inv = 1 / Math.hypot(dx,dy,dz);
+        dx*=inv; dy*=inv; dz*=inv;
+        const useRear = dz >= 0 || dualScanPhase !== 2 || !rearData;
+        const localZ = useRear ? Math.abs(dz) : Math.abs(dz);
+        // Perspective-like hemisphere mapping: center = straight ahead,
+        // rim = 90 degrees from the camera axis.
+        const denom = Math.max(0.001, localZ + 0.34);
+        let sx = 0.5 + (dx / denom) * 0.29;
+        let sy = 0.5 - (dy / denom) * 0.29;
+        sx = THREE.MathUtils.clamp(sx, 0, 1);
+        sy = THREE.MathUtils.clamp(sy, 0, 1);
+        const di = (py * ENV_SIZE + px) * 4;
+        if (useRear && rearData && dualScanPhase === 2) {
+          sample(rearData, rearScanImage.width, rearScanImage.height, sx, sy, di);
+        } else {
+          // Opposite hemisphere is front-camera capture; mirror horizontally
+          // so left/right remain continuous around the viewer.
+          sample(liveData, metrics.width, metrics.height,
+            (!useRear && dualScanPhase === 2) ? 1 - sx : sx, sy, di);
+        }
+      }
     }
-
+    ctx.putImageData(out, 0, 0);
     ctx.filter = 'none';
 
     // No synthetic studio/window highlight: bright areas in the actual photo
