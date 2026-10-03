@@ -97,6 +97,9 @@ const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave')
 const closePreview = document.getElementById('closePreview');
 const saveHelp = document.getElementById('saveHelp');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const helpBtn = document.getElementById('helpBtn');
+const helpOverlay = document.getElementById('helpOverlay');
+const closeHelpBtn = document.getElementById('closeHelpBtn');
 const savePanel = document.getElementById('savePanel');
 const closeSaveBtn = document.getElementById('closeSaveBtn');
 const formatJpegBtn = document.getElementById('formatJpegBtn');
@@ -1939,6 +1942,16 @@ function snapshotGesture() {
     angle: Math.atan2(dy, dx)
   };
 }
+
+helpBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  helpOverlay.classList.add('open');
+});
+closeHelpBtn.addEventListener('click', () => helpOverlay.classList.remove('open'));
+helpOverlay.addEventListener('click', (e) => {
+  if (e.target === helpOverlay) helpOverlay.classList.remove('open');
+});
 
 saveSettingsBtn.addEventListener('click', () => {
   morePanel.classList.remove('open');
