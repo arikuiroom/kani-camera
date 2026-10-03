@@ -92,7 +92,6 @@ const lightDirectionPad = document.getElementById('lightDirectionPad');
 const lightDirectionKnob = document.getElementById('lightDirectionKnob');
 const lightNote = document.getElementById('lightNote');
 const lightMethod = document.getElementById('lightMethod');
-const iblSource = document.getElementById('iblSource');
 const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
 const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
 const preview = document.getElementById('preview');
@@ -769,7 +768,7 @@ const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: 
 let lastLightSample = 0;
 let autoLightingEnabled = true;
 let lightMethodState = 'both';
-let iblSourceState = 'studio';
+let iblSourceState = 'photo';
 let environmentScanFrozen = false;
 let dualScanPhase = 0;
 let rearScanImage = null;
@@ -2017,27 +2016,36 @@ lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
   if (!autoLightingEnabled) setManualLighting();
 });
-iblSource.addEventListener('change', () => {
-  iblSourceState = iblSource.value;
-  environmentScanFrozen = false;
-  scanEnvironmentBtn.textContent = '環境光をスキャン';
-  scanEnvironmentStatus.textContent = '未固定';
-  applyRenderQualityMode(renderQualityMode);
-  if (!autoLightingEnabled) setManualLighting();
-});
-
 scanEnvironmentBtn.addEventListener('click', async () => {
+  // One compact environment-light cycle:
+  // ライブ → 環境光をスキャン → 前面もスキャン → スタジオ → ライブ
   if (environmentScanFrozen) {
     environmentScanFrozen = false;
     dualScanPhase = 0;
     rearScanImage = null;
-    scanEnvironmentBtn.textContent = '環境光をスキャン';
-    scanEnvironmentStatus.textContent = 'ライブ';
+    iblSourceState = 'studio';
+    applyRenderQualityMode(renderQualityMode);
+    if (!autoLightingEnabled) setManualLighting();
+    scanEnvironmentBtn.textContent = 'スタジオ';
+    scanEnvironmentStatus.textContent = '';
     return;
   }
 
-  // Camera mode: capture rear first, then switch to the front camera and ask
-  // for a second tap. This avoids relying on simultaneous dual-camera access.
+  if (iblSourceState === 'studio' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'スタジオ') {
+    iblSourceState = 'photo';
+    lastEnvUpdate = -Infinity;
+    lastLightSample = -Infinity;
+    scanEnvironmentBtn.textContent = 'ライブ';
+    scanEnvironmentStatus.textContent = '';
+    return;
+  }
+
+  if (iblSourceState === 'photo' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'ライブ') {
+    scanEnvironmentBtn.textContent = '環境光をスキャン';
+    scanEnvironmentStatus.textContent = '';
+    return;
+  }
+
   if (inputMode === 'camera' && dualScanPhase === 0) {
     if (facingMode !== 'environment') {
       facingMode = 'environment';
@@ -2045,32 +2053,27 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     }
     rearScanImage = captureVideoFrameForScan();
     if (!rearScanImage) return;
+    iblSourceState = 'photo';
     dualScanPhase = 1;
     scanEnvironmentBtn.textContent = '前面もスキャン';
-    scanEnvironmentStatus.textContent = '背面取得済';
+    scanEnvironmentStatus.textContent = '';
     facingMode = 'user';
     await startCamera();
     return;
   }
 
   iblSourceState = 'photo';
-  iblSource.value = 'photo';
   lastEnvUpdate = -Infinity;
   lastLightSample = -Infinity;
   applyRenderQualityMode(renderQualityMode);
-
-  // On the second tap the live source is the front camera; updateLiveEnvironment
-  // combines it with the stored rear frame into a six-face pseudo environment.
   if (inputMode === 'camera' && dualScanPhase === 1) dualScanPhase = 2;
   const scanNow = performance.now();
   updateLiveEnvironment(scanNow);
   updateAdaptiveLighting(scanNow, true);
   environmentScanFrozen = true;
-  scanEnvironmentBtn.textContent = 'スキャン解除';
-  scanEnvironmentStatus.textContent = dualScanPhase === 2 ? '前後固定中' : '固定中';
+  scanEnvironmentBtn.textContent = 'スタジオ';
+  scanEnvironmentStatus.textContent = '';
 
-  // After the front-camera capture, return to the normal rear camera while
-  // keeping the scanned lighting frozen.
   if (inputMode === 'camera' && dualScanPhase === 2 && facingMode !== 'environment') {
     facingMode = 'environment';
     await startCamera();
