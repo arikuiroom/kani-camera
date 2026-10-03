@@ -769,6 +769,9 @@ let autoLightingEnabled = true;
 let lightMethodState = 'both';
 let iblSourceState = 'studio';
 let environmentScanFrozen = false;
+let dualScanPhase = 0;
+let rearScanImage = null;
+let rearScanMetrics = null;
 let blendEnabledState = true;
 let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
@@ -1282,6 +1285,16 @@ liveEnvMap.needsUpdate = true;
 
 let lastEnvUpdate = 0;
 
+function captureVideoFrameForScan() {
+  if (!video.videoWidth || !video.videoHeight) return null;
+  const c = document.createElement('canvas');
+  c.width = Math.min(512, video.videoWidth);
+  c.height = Math.max(1, Math.round(c.width * video.videoHeight / video.videoWidth));
+  const ctx = c.getContext('2d', { alpha: false });
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  return c;
+}
+
 function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
@@ -1317,7 +1330,18 @@ function updateLiveEnvironment(now) {
     // the room's own lighting character instead of mixing in RoomEnvironment.
     ctx.filter = 'brightness(1.85) contrast(1.32) saturate(1.04) blur(1.2px)';
 
-    if (i % 2 === 1) {
+    if (dualScanPhase === 2 && rearScanImage) {
+      // Experimental two-sided probe: three cube faces use the rear-camera
+      // capture and three use the current front-camera capture.
+      const scanSource = i < 3 ? rearScanImage : source;
+      const sm = scanSource === rearScanImage
+        ? { width: rearScanImage.width, height: rearScanImage.height }
+        : metrics;
+      const sside = Math.min(sm.width, sm.height);
+      const ssx = (sm.width - sside) * 0.5;
+      const ssy = (sm.height - sside) * 0.5;
+      ctx.drawImage(scanSource, ssx, ssy, sside, sside, 0, 0, ENV_SIZE, ENV_SIZE);
+    } else if (i % 2 === 1) {
       ctx.translate(ENV_SIZE, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
@@ -1970,31 +1994,48 @@ iblSource.addEventListener('change', () => {
   if (!autoLightingEnabled) setManualLighting();
 });
 
-scanEnvironmentBtn.addEventListener('click', () => {
+scanEnvironmentBtn.addEventListener('click', async () => {
   if (environmentScanFrozen) {
     environmentScanFrozen = false;
+    dualScanPhase = 0;
+    rearScanImage = null;
     scanEnvironmentBtn.textContent = '環境光をスキャン';
     scanEnvironmentStatus.textContent = 'ライブ';
     return;
   }
 
-  // Capture one complete lighting state from the current camera/photo frame,
-  // then stop updating it while the user composes the shot.
+  // Camera mode: capture rear first, then switch to the front camera and ask
+  // for a second tap. This avoids relying on simultaneous dual-camera access.
+  if (inputMode === 'camera' && dualScanPhase === 0) {
+    if (facingMode !== 'environment') {
+      facingMode = 'environment';
+      await startCamera();
+    }
+    rearScanImage = captureVideoFrameForScan();
+    if (!rearScanImage) return;
+    dualScanPhase = 1;
+    scanEnvironmentBtn.textContent = '前面もスキャン';
+    scanEnvironmentStatus.textContent = '背面取得済';
+    facingMode = 'user';
+    await startCamera();
+    return;
+  }
+
   iblSourceState = 'photo';
   iblSource.value = 'photo';
   lastEnvUpdate = -Infinity;
   lastLightSample = -Infinity;
-
-  // Select the photo envMap first. applyRenderQualityMode resets IBL intensity
-  // and lights, so it must happen BEFORE sampling the frame; otherwise the
-  // freshly captured brightness gets overwritten and the model goes dark.
   applyRenderQualityMode(renderQualityMode);
+
+  // On the second tap the live source is the front camera; updateLiveEnvironment
+  // combines it with the stored rear frame into a six-face pseudo environment.
+  if (inputMode === 'camera' && dualScanPhase === 1) dualScanPhase = 2;
   const scanNow = performance.now();
   updateLiveEnvironment(scanNow);
   updateAdaptiveLighting(scanNow, true);
   environmentScanFrozen = true;
   scanEnvironmentBtn.textContent = 'スキャン解除';
-  scanEnvironmentStatus.textContent = '固定中';
+  scanEnvironmentStatus.textContent = dualScanPhase === 2 ? '前後固定中' : '固定中';
 });
 
 updateLightLabels();
