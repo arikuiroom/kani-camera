@@ -1120,7 +1120,7 @@ const ENV_MIN_BRIGHTNESS = 0.34;
 // A = production look: the existing lightweight live-camera reflection.
 // B = neutral PMREM studio IBL: stronger, more coherent metal/paint highlights.
 // C = the same IBL plus a clear top coat for painted/glossy surfaces.
-let renderQualityMode = 'current';
+let renderQualityMode = 'coat';
 function applyRenderQualityMode(mode) {
   renderQualityMode = mode;
   if (!model) return;
