@@ -1610,6 +1610,21 @@ function render(now = 0) {
   if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
   if (fovPanel.classList.contains('open')) updatePerspectiveGuide();
 
+  if (chromeTestEnabled && model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material || !child.userData.chromeOriginalMaterial) return;
+      child.material.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
+      child.material.envMapIntensity = 1.0;
+      if (child.material.envMapRotation) {
+        const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
+        child.material.envMapRotation.set(
+          useIblRotation ? THREE.MathUtils.degToRad(Number(lightElevation.value)) : 0,
+          useIblRotation ? THREE.MathUtils.degToRad(Number(lightAzimuth.value)) : 0,
+          0
+        );
+      }
+    });
+  }
   renderer.render(scene, camera);
   if (iblPreviewRenderer && iblPreviewMaterial && lightPanel.classList.contains('open')) {
     if (iblSourceState === 'photo') {
@@ -2123,35 +2138,30 @@ chromeTestBtn?.addEventListener('click', () => {
   chromeTestBtn.textContent = chromeTestEnabled ? 'シルバー解除' : '鏡面シルバー';
   chromeTestBtn.classList.toggle('active', chromeTestEnabled);
   if (!model) return;
+
   model.traverse((child) => {
     if (!child.isMesh || !child.material) return;
-    const mats = Array.isArray(child.material) ? child.material : [child.material];
-    mats.forEach((mat) => {
-      if (chromeTestEnabled) {
-        if (!mat.userData.chromeBackup) {
-          mat.userData.chromeBackup = {
-            map: mat.map, metalnessMap: mat.metalnessMap, roughnessMap: mat.roughnessMap,
-            metalness: mat.metalness, roughness: mat.roughness, color: mat.color.clone()
-          };
-        }
-        mat.map = null;
-        mat.metalnessMap = null;
-        mat.roughnessMap = null;
-        mat.color.set(0xffffff);
-        mat.metalness = 1;
-        mat.roughness = 0;
-      } else {
-        const b = mat.userData.chromeBackup;
-        if (b) {
-          mat.map = b.map; mat.metalnessMap = b.metalnessMap; mat.roughnessMap = b.roughnessMap;
-          mat.metalness = b.metalness; mat.roughness = b.roughness; mat.color.copy(b.color);
-          delete mat.userData.chromeBackup;
-        }
+    if (chromeTestEnabled) {
+      if (!child.userData.chromeOriginalMaterial) {
+        child.userData.chromeOriginalMaterial = child.material;
       }
-      mat.needsUpdate = true;
-    });
+      // Deliberately use a brand-new material, independent of every original
+      // crab-guitar texture/map/clearcoat setting. This makes it a clean IBL test.
+      child.material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: 1,
+        roughness: 0,
+        envMap: iblSourceState === 'photo' ? liveEnvMap : studioEnvironment,
+        envMapIntensity: 1.0
+      });
+    } else if (child.userData.chromeOriginalMaterial) {
+      if (child.material?.dispose) child.material.dispose();
+      child.material = child.userData.chromeOriginalMaterial;
+      delete child.userData.chromeOriginalMaterial;
+    }
   });
-  applyRenderQualityMode(renderQualityMode);
+
+  if (!chromeTestEnabled) applyRenderQualityMode(renderQualityMode);
   boostLiveFps();
 });
 
