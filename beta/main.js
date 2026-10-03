@@ -1163,8 +1163,8 @@ function applyRenderQualityMode(mode) {
       }
 
       if (mat.isMeshPhysicalMaterial) {
-        mat.clearcoat = wantsCoat ? 0.72 : 0;
-        mat.clearcoatRoughness = wantsCoat ? 0.14 : 0;
+        mat.clearcoat = wantsCoat ? 0.58 : 0;
+        mat.clearcoatRoughness = wantsCoat ? 0.18 : 0;
       }
       mat.needsUpdate = true;
     });
