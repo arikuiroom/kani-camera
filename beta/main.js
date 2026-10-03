@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const video = document.getElementById('camera');
 const photoBackground = document.getElementById('photoBackground');
@@ -354,6 +355,15 @@ renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
+
+// Neutral studio IBL used only by the Beta B/C comparison modes.
+// PMREM turns the room lighting into reflection data suited to PBR materials.
+// It lights/reflection-maps the model without drawing a studio background,
+// so the camera/photo behind the crab guitar stays exactly the same.
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+const studioEnvironment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+pmremGenerator.dispose();
 
 // v1.13: real-time projected shadow onto a transparent virtual floor.
 // PCF soft shadows are light enough for live iPhone preview and are also
@@ -1096,8 +1106,9 @@ const METALNESS_GAIN = 0.88;
 const ENV_MIN_BRIGHTNESS = 0.34;
 
 // v1.26.1 visual A/B/C experiment.
-// A preserves the production look. B makes the existing live environment
-// reflection brighter and sharper. C adds a clear top coat like glossy paint.
+// A = production look: the existing lightweight live-camera reflection.
+// B = neutral PMREM studio IBL: stronger, more coherent metal/paint highlights.
+// C = the same IBL plus a clear top coat for painted/glossy surfaces.
 let renderQualityMode = 'current';
 function applyRenderQualityMode(mode) {
   renderQualityMode = mode;
@@ -1107,13 +1118,14 @@ function applyRenderQualityMode(mode) {
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach((oldMat, index) => {
       if (!oldMat.isMeshStandardMaterial && !oldMat.isMeshPhysicalMaterial) return;
-      let mat = oldMat;
+
       const wantsCoat = mode === 'coat';
+      let mat = oldMat;
+
+      // Switch material class only when C needs the extra clearcoat layer.
       if (wantsCoat && !oldMat.isMeshPhysicalMaterial) {
         mat = new THREE.MeshPhysicalMaterial();
         THREE.MeshStandardMaterial.prototype.copy.call(mat, oldMat);
-        mat.clearcoat = 0.72;
-        mat.clearcoatRoughness = 0.16;
         if (Array.isArray(child.material)) child.material[index] = mat;
         else child.material = mat;
         oldMat.dispose();
@@ -1124,12 +1136,31 @@ function applyRenderQualityMode(mode) {
         else child.material = mat;
         oldMat.dispose();
       }
-      mat.envMapIntensity = mode === 'current' ? ENV_REFLECTION_INTENSITY : 1.75;
+
+      if (mode === 'current') {
+        // Exact current production reflection path.
+        mat.envMap = liveEnvMap;
+        mat.envMapIntensity = ENV_REFLECTION_INTENSITY;
+      } else {
+        // B/C use a proper prefiltered image-based lighting environment.
+        mat.envMap = studioEnvironment;
+        mat.envMapIntensity = 1.35;
+      }
+
+      if (mat.isMeshPhysicalMaterial) {
+        mat.clearcoat = wantsCoat ? 0.72 : 0;
+        mat.clearcoatRoughness = wantsCoat ? 0.14 : 0;
+      }
       mat.needsUpdate = true;
     });
   });
   renderChoices.forEach((btn) => btn.classList.toggle('active', btn.dataset.renderMode === mode));
-  statusEl.textContent = mode === 'current' ? '画質 A：現在' : mode === 'ibl' ? '画質 B：反射強化' : '画質 C：反射＋クリアコート';
+  statusEl.textContent = mode === 'current'
+    ? '画質 A：現在'
+    : mode === 'ibl'
+      ? '画質 B：IBL反射'
+      : '画質 C：IBL＋クリアコート';
+  boostLiveFps();
 }
 
 // ---- Pseudo live environment reflection ----------------------------------
