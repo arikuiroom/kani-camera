@@ -370,6 +370,33 @@ pmremGenerator.compileEquirectangularShader();
 const studioEnvironment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 pmremGenerator.dispose();
 
+// Small chrome-ball IBL monitor in the lighting panel.
+const iblPreviewCanvas = document.getElementById('iblPreviewCanvas');
+let iblPreviewRenderer = null;
+let iblPreviewScene = null;
+let iblPreviewCamera = null;
+let iblPreviewMaterial = null;
+if (iblPreviewCanvas) {
+  iblPreviewRenderer = new THREE.WebGLRenderer({ canvas: iblPreviewCanvas, alpha: true, antialias: true });
+  iblPreviewRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  iblPreviewRenderer.setSize(76, 76, false);
+  iblPreviewRenderer.setClearColor(0x000000, 0);
+  iblPreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  iblPreviewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  iblPreviewRenderer.toneMappingExposure = 1.08;
+  iblPreviewScene = new THREE.Scene();
+  iblPreviewCamera = new THREE.PerspectiveCamera(30, 1, 0.1, 10);
+  iblPreviewCamera.position.set(0, 0, 3.2);
+  iblPreviewMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    metalness: 1,
+    roughness: 0,
+    envMap: studioEnvironment,
+    envMapIntensity: 1.0
+  });
+  iblPreviewScene.add(new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), iblPreviewMaterial));
+}
+
 // v1.13: real-time projected shadow onto a transparent virtual floor.
 // PCF soft shadows are light enough for live iPhone preview and are also
 // included in the high-resolution capture pass.
@@ -1533,6 +1560,19 @@ function render(now = 0) {
   if (fovPanel.classList.contains('open')) updatePerspectiveGuide();
 
   renderer.render(scene, camera);
+  if (iblPreviewRenderer && iblPreviewMaterial && lightPanel.classList.contains('open')) {
+    iblPreviewMaterial.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
+    if (iblPreviewMaterial.envMapRotation) {
+      const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
+      iblPreviewMaterial.envMapRotation.set(
+        useIblRotation ? THREE.MathUtils.degToRad(Number(lightElevation.value)) : 0,
+        useIblRotation ? THREE.MathUtils.degToRad(Number(lightAzimuth.value)) : 0,
+        0
+      );
+    }
+    iblPreviewMaterial.needsUpdate = true;
+    iblPreviewRenderer.render(iblPreviewScene, iblPreviewCamera);
+  }
 }
 requestAnimationFrame(render);
 
