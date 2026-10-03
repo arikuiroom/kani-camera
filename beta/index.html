@@ -776,7 +776,7 @@
       }
       #morePanel,
       #lightPanel, #fovPanel, #colorPanel, #inputPanel,
-      #shadowPanel, #blendPanel, #floorPanel, #savePanel {
+      #shadowPanel, #blendPanel, #floorPanel, #savePanel, #renderComparePanel {
         top: max(12px, env(safe-area-inset-top));
         left: calc(max(8px, env(safe-area-inset-left)) + 82px);
         right: auto;
@@ -885,8 +885,8 @@
       </div>
       <div class="format-grid" style="grid-template-columns:1fr;">
         <button class="format-choice render-choice active" data-render-mode="current">A　現在</button>
-        <button class="format-choice render-choice" data-render-mode="ibl">B　反射・ハイライト強化</button>
-        <button class="format-choice render-choice" data-render-mode="coat">C　反射＋クリアコート</button>
+        <button class="format-choice render-choice" data-render-mode="ibl">B　IBL・環境反射強化</button>
+        <button class="format-choice render-choice" data-render-mode="coat">C　IBL＋クリアコート</button>
       </div>
       <p class="format-note">同じ構図のまま切り替えて、金属の反射と赤い塗装のツヤを比較できます。</p>
     </div>
