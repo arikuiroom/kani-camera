@@ -1318,7 +1318,7 @@ function applyRenderQualityMode(mode) {
 // For this lightweight Web version we build a small CubeTexture from several
 // cropped copies of the live camera image. It is not physically exact, but it
 // lets shiny/metallic areas pick up the color and brightness of the surroundings.
-const ENV_SIZE = 64;
+const ENV_SIZE = 256;
 const envCanvases = Array.from({ length: 6 }, () => {
   const c = document.createElement('canvas');
   c.width = ENV_SIZE;
@@ -1364,36 +1364,42 @@ function updateLiveEnvironment(now) {
     ctx.fillStyle = `rgb(${base}, ${base}, ${base})`;
     ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
-    const shiftX = ((i % 3) - 1) * side * 0.12;
-    const shiftY = (i >= 3 ? 1 : -1) * side * 0.06;
-    const sx = Math.max(0, Math.min(vw - side, sxBase + shiftX));
-    const sy = Math.max(0, Math.min(vh - side, syBase + shiftY));
+    // Treat one camera image as a wide hemisphere rather than cloning the
+    // same square crop onto all six cube faces. Each cube face samples a
+    // different horizontal sector of the source image.
+    ctx.globalAlpha = 1;
+    ctx.filter = 'brightness(1.18) contrast(1.12) saturate(1.02)';
 
-    // Pull live color from the current camera image, but brighten/soften it
-    // because it is being used as lighting rather than as a literal screen.
-    ctx.globalAlpha = CAMERA_ENV_BLEND;
-    // Lift exposure while increasing local light-source separation. This keeps
-    // the room's own lighting character instead of mixing in RoomEnvironment.
-    ctx.filter = 'brightness(1.85) contrast(1.32) saturate(1.04) blur(1.2px)';
+    const drawHemisphereFace = (img, sm, faceIndex, mirror = false) => {
+      const cropH = sm.height;
+      const sectorW = sm.width * 0.58;
+      const centers = [0.18, 0.50, 0.82];
+      const sector = faceIndex % 3;
+      const cx = sm.width * centers[sector];
+      const sw = Math.min(sm.width, sectorW);
+      const sx = Math.max(0, Math.min(sm.width - sw, cx - sw * 0.5));
+      if (mirror) {
+        ctx.translate(ENV_SIZE, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(img, sx, 0, sw, cropH, 0, 0, ENV_SIZE, ENV_SIZE);
+      if (mirror) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    };
 
     if (dualScanPhase === 2 && rearScanImage) {
-      // Experimental two-sided probe: three cube faces use the rear-camera
-      // capture and three use the current front-camera capture.
-      const scanSource = i < 3 ? rearScanImage : source;
-      const sm = scanSource === rearScanImage
+      // Rear capture = one hemisphere, front capture = the opposite hemisphere.
+      // Three adjacent cube faces are cut from each image instead of repeating
+      // one identical crop six times.
+      const useRear = i < 3;
+      const scanSource = useRear ? rearScanImage : source;
+      const sm = useRear
         ? { width: rearScanImage.width, height: rearScanImage.height }
         : metrics;
-      const sside = Math.min(sm.width, sm.height);
-      const ssx = (sm.width - sside) * 0.5;
-      const ssy = (sm.height - sside) * 0.5;
-      ctx.drawImage(scanSource, ssx, ssy, sside, sside, 0, 0, ENV_SIZE, ENV_SIZE);
-    } else if (i % 2 === 1) {
-      ctx.translate(ENV_SIZE, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      drawHemisphereFace(scanSource, sm, i, !useRear);
     } else {
-      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
+      // Live mode has only one view, but still distribute different sectors
+      // across the cube so reflections remain spatially readable.
+      drawHemisphereFace(source, metrics, i, i >= 3);
     }
 
     ctx.filter = 'none';
