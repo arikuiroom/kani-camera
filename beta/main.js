@@ -376,6 +376,8 @@ let iblPreviewRenderer = null;
 let iblPreviewScene = null;
 let iblPreviewCamera = null;
 let iblPreviewMaterial = null;
+let iblPreviewStudioEnvironment = null;
+let iblPreviewLiveEnvMap = null;
 if (iblPreviewCanvas) {
   iblPreviewRenderer = new THREE.WebGLRenderer({ canvas: iblPreviewCanvas, alpha: true, antialias: true });
   iblPreviewRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -384,6 +386,11 @@ if (iblPreviewCanvas) {
   iblPreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
   iblPreviewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
   iblPreviewRenderer.toneMappingExposure = 1.08;
+  // Render-target textures belong to the WebGL renderer that created them.
+  // Build a separate studio PMREM for this second renderer.
+  const previewPmrem = new THREE.PMREMGenerator(iblPreviewRenderer);
+  iblPreviewStudioEnvironment = previewPmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  previewPmrem.dispose();
   iblPreviewScene = new THREE.Scene();
   iblPreviewCamera = new THREE.PerspectiveCamera(30, 1, 0.1, 10);
   iblPreviewCamera.position.set(0, 0, 3.2);
@@ -391,7 +398,7 @@ if (iblPreviewCanvas) {
     color: 0xffffff,
     metalness: 1,
     roughness: 0,
-    envMap: studioEnvironment,
+    envMap: iblPreviewStudioEnvironment,
     envMapIntensity: 1.0
   });
   iblPreviewScene.add(new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), iblPreviewMaterial));
@@ -1322,6 +1329,11 @@ const envCanvases = Array.from({ length: 6 }, () => {
 const liveEnvMap = new THREE.CubeTexture(envCanvases);
 liveEnvMap.colorSpace = THREE.SRGBColorSpace;
 liveEnvMap.needsUpdate = true;
+// The IBL monitor has its own WebGL context, so it also needs its own
+// CubeTexture object. Both textures read from the same six live canvases.
+iblPreviewLiveEnvMap = new THREE.CubeTexture(envCanvases);
+iblPreviewLiveEnvMap.colorSpace = THREE.SRGBColorSpace;
+iblPreviewLiveEnvMap.needsUpdate = true;
 
 let lastEnvUpdate = 0;
 
@@ -1400,6 +1412,7 @@ function updateLiveEnvironment(now) {
   });
 
   liveEnvMap.needsUpdate = true;
+  if (iblPreviewLiveEnvMap) iblPreviewLiveEnvMap.needsUpdate = true;
 }
 
 
@@ -1561,7 +1574,9 @@ function render(now = 0) {
 
   renderer.render(scene, camera);
   if (iblPreviewRenderer && iblPreviewMaterial && lightPanel.classList.contains('open')) {
-    iblPreviewMaterial.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
+    iblPreviewMaterial.envMap = iblSourceState === 'photo' ? iblPreviewLiveEnvMap : iblPreviewStudioEnvironment;
+    // needsUpdate can be consumed independently by the two WebGL contexts.
+    if (iblSourceState === 'photo' && iblPreviewLiveEnvMap) iblPreviewLiveEnvMap.needsUpdate = true;
     if (iblPreviewMaterial.envMapRotation) {
       const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
       iblPreviewMaterial.envMapRotation.set(
