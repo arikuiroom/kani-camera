@@ -894,25 +894,24 @@ function updateAdaptiveLighting(now) {
   const avgLum = lumSum / count;
   const strength = blendStrengthState;
 
-  // Keep the tested 0.55 as the neutral centre. Environment brightness only
-  // nudges it within a restrained range so the polished material stays stable.
-  const targetIBL = THREE.MathUtils.clamp(
-    THREE.MathUtils.lerp(0.55, 0.30 + avgLum * 0.55, strength),
-    0.32, 0.68
-  );
+  // Deliberately exaggerated v1.27.2 test: make environment matching obvious.
+  // Near-black scenes can almost extinguish the studio IBL; bright scenes can
+  // push it well above the normal 0.55 reference.
+  const matchedIBL = THREE.MathUtils.clamp(0.02 + avgLum * 1.05, 0.02, 0.82);
+  const targetIBL = THREE.MathUtils.lerp(0.55, matchedIBL, strength);
 
-  // A very weak coloured ambient fill carries the room's colour temperature.
-  // It is intentionally much weaker than the old lighting system.
+  // Exaggerated colour-temperature test: make the camera/photo colour cast
+  // visibly affect ambient illumination without modifying the albedo itself.
   const safeLum = Math.max(avgLum, 0.08);
   sampledColor.setRGB(
     THREE.MathUtils.clamp(r / safeLum, 0.65, 1.35),
     THREE.MathUtils.clamp(g / safeLum, 0.65, 1.35),
     THREE.MathUtils.clamp(b / safeLum, 0.65, 1.35)
   );
-  targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.16 * strength);
-  hemi.color.lerp(targetLightColor, 0.20);
+  targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.62 * strength);
+  hemi.color.lerp(targetLightColor, 0.45);
   hemi.groundColor.copy(hemi.color).multiplyScalar(0.55);
-  hemi.intensity += (0.16 * strength - hemi.intensity) * 0.20;
+  hemi.intensity += (0.38 * strength * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0) - hemi.intensity) * 0.35;
   key.intensity = 0;
   fill.intensity = 0;
 
@@ -922,7 +921,7 @@ function updateAdaptiveLighting(now) {
     for (const mat of mats) {
       if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
         mat.color.setRGB(1, 1, 1);
-        mat.envMapIntensity += (targetIBL - mat.envMapIntensity) * 0.22;
+        mat.envMapIntensity += (targetIBL - mat.envMapIntensity) * 0.55;
       }
     }
   });
