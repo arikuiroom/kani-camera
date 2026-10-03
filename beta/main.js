@@ -2026,8 +2026,8 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     iblSourceState = 'studio';
     applyRenderQualityMode(renderQualityMode);
     if (!autoLightingEnabled) setManualLighting();
-    scanEnvironmentBtn.textContent = 'スタジオ';
-    scanEnvironmentStatus.textContent = '';
+    scanEnvironmentStatus.textContent = 'スタジオ';
+    scanEnvironmentBtn.textContent = 'ライブに戻す';
     return;
   }
 
@@ -2035,14 +2035,14 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     iblSourceState = 'photo';
     lastEnvUpdate = -Infinity;
     lastLightSample = -Infinity;
-    scanEnvironmentBtn.textContent = 'ライブ';
-    scanEnvironmentStatus.textContent = '';
+    scanEnvironmentStatus.textContent = 'ライブ';
+    scanEnvironmentBtn.textContent = 'スキャン';
     return;
   }
 
   if (iblSourceState === 'photo' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'ライブ') {
-    scanEnvironmentBtn.textContent = '環境光をスキャン';
-    scanEnvironmentStatus.textContent = '';
+    scanEnvironmentStatus.textContent = 'ライブ';
+    scanEnvironmentBtn.textContent = 'スキャン';
     return;
   }
 
@@ -2055,8 +2055,8 @@ scanEnvironmentBtn.addEventListener('click', async () => {
     if (!rearScanImage) return;
     iblSourceState = 'photo';
     dualScanPhase = 1;
+    scanEnvironmentStatus.textContent = 'スキャン中';
     scanEnvironmentBtn.textContent = '前面もスキャン';
-    scanEnvironmentStatus.textContent = '';
     facingMode = 'user';
     await startCamera();
     return;
@@ -2071,8 +2071,8 @@ scanEnvironmentBtn.addEventListener('click', async () => {
   updateLiveEnvironment(scanNow);
   updateAdaptiveLighting(scanNow, true);
   environmentScanFrozen = true;
-  scanEnvironmentBtn.textContent = 'スタジオ';
-  scanEnvironmentStatus.textContent = '';
+  scanEnvironmentStatus.textContent = 'スキャン固定';
+  scanEnvironmentBtn.textContent = 'スタジオに戻す';
 
   if (inputMode === 'camera' && dualScanPhase === 2 && facingMode !== 'environment') {
     facingMode = 'environment';
