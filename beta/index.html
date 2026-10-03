@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.31.4 beta</title>
+<title>カニギター カメラ v1.32.0 beta</title>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -506,7 +506,10 @@
       font-size: 18px;
     }
     .light-row input[type="range"] { width: 100%; pointer-events: auto; touch-action: pan-x; }
-    .light-direction-wrap { margin-top: 3px; }
+    .light-direction-wrap { margin-top: 3px; display:grid; grid-template-columns:minmax(0,1fr) 82px; gap:8px; align-items:center; }
+    .ibl-preview-wrap { width:82px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    #iblPreviewCanvas { width:76px; height:76px; display:block; }
+    .ibl-preview-caption { font-size:10px; opacity:.55; margin-top:2px; }
     .light-direction-pad {
       position: relative;
       width: 100%;
@@ -937,7 +940,7 @@
       <button id="renderCompareBtn" style="display:none">画質比較</button>
       <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.31.4 beta</div>
+      <div class="menu-version">Kani Camera v1.32.0 beta</div>
     </div>
     
     <div id="renderComparePanel" aria-label="画質比較">
@@ -1023,6 +1026,10 @@
           <div class="dir-cross-x"></div>
           <div class="dir-cross-y"></div>
           <div id="lightDirectionKnob" class="light-direction-knob"></div>
+        </div>
+        <div class="ibl-preview-wrap" aria-label="IBLプレビュー">
+          <canvas id="iblPreviewCanvas" width="76" height="76"></canvas>
+          <span class="ibl-preview-caption">IBL</span>
         </div>
       </div>
       <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" hidden />
@@ -1206,7 +1213,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.31.4 beta</div>
+      <div class="start-version">Kani Camera v1.32.0 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
