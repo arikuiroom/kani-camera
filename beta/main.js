@@ -867,12 +867,11 @@ function resetBackgroundBlend() {
 }
 
 function updateAdaptiveLighting(now) {
-  // A keeps the existing "なじみ" and "照明" behaviour. B/C are isolated
-  // from both systems so their appearance comes from IBL / clearcoat only.
-  if (renderQualityMode !== 'current') return;
+  // v1.27.1 hybrid "なじみ": keep the clean studio PMREM/Clearcoat look,
+  // but let the real camera/photo gently influence IBL brightness and colour.
+  // The albedo itself is never tinted.
   const source = getActiveBackgroundSource();
-  if (!source) return;
-  if (!autoLightingEnabled && !blendEnabledState) return;
+  if (!source || !blendEnabledState) return;
   if (now - lastLightSample < 600) return;
   lastLightSample = now;
 
@@ -883,56 +882,51 @@ function updateAdaptiveLighting(now) {
   const data = lightSampleCtx.getImageData(0, 0, w, h).data;
 
   let r = 0, g = 0, b = 0, lumSum = 0;
-  let brightWeight = 0, brightX = 0, brightY = 0;
   const count = w * h;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const rr = data[i] / 255;
-      const gg = data[i + 1] / 255;
-      const bb = data[i + 2] / 255;
-      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
-      r += rr; g += gg; b += bb; lumSum += lum;
-
-      // Emphasize the brightest areas to estimate a plausible key-light direction.
-      const weight = Math.max(0, lum - 0.45) ** 2;
-      brightWeight += weight;
-      brightX += (x / (w - 1) * 2 - 1) * weight;
-      brightY += (1 - y / (h - 1) * 2) * weight;
-    }
+  for (let i = 0; i < data.length; i += 4) {
+    const rr = data[i] / 255;
+    const gg = data[i + 1] / 255;
+    const bb = data[i + 2] / 255;
+    r += rr; g += gg; b += bb;
+    lumSum += 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
   }
-
   r /= count; g /= count; b /= count;
   const avgLum = lumSum / count;
+  const strength = blendStrengthState;
 
-  applyBackgroundBlend(r, g, b, avgLum);
-  sampledColor.setRGB(r, g, b);
-  if (autoLightingEnabled) {
-    // Mostly white, gently tinted by the environment so skin/paint colors do not go wild.
-    targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.32);
-    key.color.lerp(targetLightColor, 0.35);
-    fill.color.lerp(targetLightColor, 0.22);
-    hemi.color.lerp(targetLightColor, 0.18);
-  
-    // Map scene brightness to a restrained lighting range.
-    const autoPower = THREE.MathUtils.clamp(1.15 + avgLum * 2.35, 1.25, 3.15);
-    key.intensity += (autoPower - key.intensity) * 0.28;
-    fill.intensity += (autoPower * 0.38 - fill.intensity) * 0.22;
-    hemi.intensity += (1.25 + avgLum * 0.75 - hemi.intensity) * 0.20;
-  
-    if (brightWeight > 0.001) {
-      const nx = THREE.MathUtils.clamp(brightX / brightWeight, -1, 1);
-      const ny = THREE.MathUtils.clamp(brightY / brightWeight, -1, 1);
-      const desired = new THREE.Vector3(nx * 4.0, ny * 3.0 + 1.0, 4.0).normalize().multiplyScalar(5);
-      key.position.lerp(desired, 0.22);
+  // Keep the tested 0.55 as the neutral centre. Environment brightness only
+  // nudges it within a restrained range so the polished material stays stable.
+  const targetIBL = THREE.MathUtils.clamp(
+    THREE.MathUtils.lerp(0.55, 0.30 + avgLum * 0.55, strength),
+    0.32, 0.68
+  );
+
+  // A very weak coloured ambient fill carries the room's colour temperature.
+  // It is intentionally much weaker than the old lighting system.
+  const safeLum = Math.max(avgLum, 0.08);
+  sampledColor.setRGB(
+    THREE.MathUtils.clamp(r / safeLum, 0.65, 1.35),
+    THREE.MathUtils.clamp(g / safeLum, 0.65, 1.35),
+    THREE.MathUtils.clamp(b / safeLum, 0.65, 1.35)
+  );
+  targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.16 * strength);
+  hemi.color.lerp(targetLightColor, 0.20);
+  hemi.groundColor.copy(hemi.color).multiplyScalar(0.55);
+  hemi.intensity += (0.16 * strength - hemi.intensity) * 0.20;
+  key.intensity = 0;
+  fill.intensity = 0;
+
+  if (model) model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+        mat.color.setRGB(1, 1, 1);
+        mat.envMapIntensity += (targetIBL - mat.envMapIntensity) * 0.22;
+      }
     }
-  
-    lightPower.value = key.intensity.toFixed(2);
-    lightPowerOut.textContent = key.intensity.toFixed(2);
-  }
+  });
 }
-
 
 function getActiveBackgroundSource() {
   if (inputMode === 'photo' && photoBackground.naturalWidth > 0) return photoBackground;
@@ -1186,7 +1180,8 @@ function applyRenderQualityMode(mode) {
     resetBackgroundBlend();
     key.intensity = 0;
     fill.intensity = 0;
-    hemi.intensity = 0;
+    hemi.intensity = blendEnabledState ? 0.16 * blendStrengthState : 0;
+    lastLightSample = 0;
   }
 
   renderChoices.forEach((btn) => btn.classList.toggle('active', btn.dataset.renderMode === mode));
