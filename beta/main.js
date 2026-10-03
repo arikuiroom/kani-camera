@@ -938,7 +938,15 @@ function updateAdaptiveLighting(now) {
   targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.62 * strength);
   hemi.color.lerp(targetLightColor, 0.45);
   hemi.groundColor.copy(hemi.color).multiplyScalar(0.55);
-  hemi.intensity += (0.38 * strength * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0) - hemi.intensity) * 0.35;
+
+  // v1.27.8: when using the camera/photo as the IBL, let the same real-world
+  // sample provide a soft diffuse fill as a separate layer. The photo IBL
+  // remains responsible for glossy reflections; this light simply keeps the
+  // base colour and neck readable in dim rooms.
+  const photoFill = iblSourceState === 'photo'
+    ? THREE.MathUtils.lerp(0.30, 0.82, THREE.MathUtils.clamp(avgLum * 1.8, 0, 1))
+    : 0.38 * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0);
+  hemi.intensity += (photoFill * strength - hemi.intensity) * 0.35;
   key.intensity = 0;
   fill.intensity = 0;
 
