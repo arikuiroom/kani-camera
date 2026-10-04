@@ -95,7 +95,9 @@ const lightMethod = document.getElementById('lightMethod');
 const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
 const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
 const chromeTestBtn = document.getElementById('chromeTestBtn');
+const lightingDiagnosticBtn = document.getElementById('lightingDiagnosticBtn');
 let chromeTestEnabled = false;
+let lightingDiagnosticState = 'normal';
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -1246,6 +1248,44 @@ function applyInvertedRoughnessClearcoatMask(mat) {
   mat.customProgramCacheKey = () => 'kani-inverse-roughness-clearcoat-v1';
 }
 
+function applyLightingDiagnostic() {
+  if (!model) return;
+
+  const iblOnly = lightingDiagnosticState === 'ibl';
+  const lightsOnly = lightingDiagnosticState === 'lights';
+
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((mat) => {
+      if (!mat.isMeshStandardMaterial && !mat.isMeshPhysicalMaterial) return;
+      if (lightsOnly) {
+        if (mat.envMap) mat.userData.kaniDiagnosticEnvMap = mat.envMap;
+        mat.envMap = null;
+      } else if (!mat.envMap && mat.userData.kaniDiagnosticEnvMap) {
+        mat.envMap = mat.userData.kaniDiagnosticEnvMap;
+      }
+      mat.needsUpdate = true;
+    });
+  });
+
+  if (iblOnly) {
+    key.intensity = 0;
+    fill.intensity = 0;
+    hemi.intensity = 0;
+  } else if (!autoLightingEnabled) {
+    setManualLighting();
+  } else {
+    updateAdaptiveLighting(performance.now(), true);
+  }
+
+  if (lightingDiagnosticBtn) {
+    lightingDiagnosticBtn.textContent =
+      lightingDiagnosticState === 'normal' ? '通常' :
+      lightingDiagnosticState === 'ibl' ? 'HDRIのみ' : 'ライトのみ';
+  }
+}
+
 function applyRenderQualityMode(mode) {
   renderQualityMode = mode;
   if (!model) return;
@@ -2161,6 +2201,14 @@ lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
   if (!autoLightingEnabled) setManualLighting();
 });
+lightingDiagnosticBtn?.addEventListener('click', () => {
+  lightingDiagnosticState =
+    lightingDiagnosticState === 'normal' ? 'ibl' :
+    lightingDiagnosticState === 'ibl' ? 'lights' : 'normal';
+  applyRenderQualityMode(renderQualityMode);
+  applyLightingDiagnostic();
+});
+
 chromeTestBtn?.addEventListener('click', () => {
   chromeTestEnabled = !chromeTestEnabled;
   chromeTestBtn.textContent = chromeTestEnabled ? 'シルバー解除' : '鏡面シルバー';
