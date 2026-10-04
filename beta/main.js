@@ -1244,8 +1244,21 @@ function applyInvertedRoughnessClearcoatMask(mat) {
   clearcoat *= (1.0 - texture2D( roughnessMap, vRoughnessMapUv ).g);
 #endif`
     );
+
+    // Matte regions such as the fretboard are already identified by the
+    // roughness map. Raise only their effective IBL roughness before Three.js
+    // samples the PMREM, instead of modifying internal radiance variables.
+    // This keeps the shader on Three.js' supported physical-lighting path.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      `#include <roughnessmap_fragment>
+#ifdef USE_ROUGHNESSMAP
+  float kaniMatteMask = texture2D( roughnessMap, vRoughnessMapUv ).g;
+  roughnessFactor = mix( roughnessFactor, 1.0, kaniMatteMask * 0.85 );
+#endif`
+    );
   };
-  mat.customProgramCacheKey = () => 'kani-inverse-roughness-clearcoat-v1';
+  mat.customProgramCacheKey = () => 'kani-clearcoat-matte-ibl-v3';
 }
 
 function applyLightingDiagnostic() {
