@@ -994,8 +994,8 @@ function updateAdaptiveLighting(now, instant = false) {
   // Near-black scenes can almost extinguish the studio IBL; bright scenes can
   // push it well above the normal 0.55 reference.
   const matchedIBL = THREE.MathUtils.clamp(0.02 + avgLum * 1.05, 0.02, 0.82);
-  const baseIBL = iblSourceState === 'photo' ? 1.65 : 0.55;
-  const matchedPhotoIBL = THREE.MathUtils.clamp(0.55 + avgLum * 2.6, 0.55, 2.8);
+  const baseIBL = iblSourceState === 'photo' ? 0.62 : 0.55;
+  const matchedPhotoIBL = THREE.MathUtils.clamp(0.38 + avgLum * 0.95, 0.42, 1.05);
   const targetIBL = iblSourceState === 'photo'
     ? THREE.MathUtils.lerp(baseIBL, matchedPhotoIBL, strength)
     : THREE.MathUtils.lerp(0.55, matchedIBL, strength);
@@ -1405,11 +1405,11 @@ function updateLiveEnvironment(now) {
       const gg = data.data[si+1] / 255;
       const bb = data.data[si+2] / 255;
       const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
-      const highlight = THREE.MathUtils.smoothstep(lum, 0.58, 0.96);
-      const gain = 1.15 + highlight * highlight * 2.85;
-      out.data[di] = Math.min(255, Math.pow(rr, 0.92) * gain * 255);
-      out.data[di+1] = Math.min(255, Math.pow(gg, 0.92) * gain * 255);
-      out.data[di+2] = Math.min(255, Math.pow(bb, 0.92) * gain * 255);
+      const highlight = THREE.MathUtils.smoothstep(lum, 0.72, 0.98);
+      const gain = 1.02 + highlight * highlight * 0.48;
+      out.data[di] = Math.min(255, rr * gain * 255);
+      out.data[di+1] = Math.min(255, gg * gain * 255);
+      out.data[di+2] = Math.min(255, bb * gain * 255);
       out.data[di+3] = 255;
     };
 
