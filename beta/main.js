@@ -1229,6 +1229,23 @@ const ENV_MIN_BRIGHTNESS = 0.34;
 // B = neutral PMREM studio IBL: stronger, more coherent metal/paint highlights.
 // C = the same IBL plus a clear top coat for painted/glossy surfaces.
 let renderQualityMode = 'coat';
+// Reuse the existing roughness map as an inverse clearcoat mask without
+// loading another image: rough/white areas (e.g. the fretboard) lose clearcoat,
+// while smooth/dark painted areas keep it.
+function applyInvertedRoughnessClearcoatMask(mat) {
+  if (!mat?.isMeshPhysicalMaterial) return;
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'float clearcoat = material.clearcoat;',
+      `float clearcoat = material.clearcoat;
+#ifdef USE_ROUGHNESSMAP
+  clearcoat *= (1.0 - texture2D( roughnessMap, vRoughnessMapUv ).g);
+#endif`
+    );
+  };
+  mat.customProgramCacheKey = () => 'kani-inverse-roughness-clearcoat-v1';
+}
+
 function applyRenderQualityMode(mode) {
   renderQualityMode = mode;
   if (!model) return;
@@ -1273,6 +1290,7 @@ function applyRenderQualityMode(mode) {
       if (mat.isMeshPhysicalMaterial) {
         mat.clearcoat = wantsCoat ? 0.58 : 0;
         mat.clearcoatRoughness = wantsCoat ? 0.18 : 0;
+        applyInvertedRoughnessClearcoatMask(mat);
       }
       mat.needsUpdate = true;
     });
