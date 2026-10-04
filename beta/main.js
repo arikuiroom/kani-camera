@@ -1237,6 +1237,7 @@ let renderQualityMode = 'coat';
 function applyInvertedRoughnessClearcoatMask(mat) {
   if (!mat?.isMeshPhysicalMaterial) return;
   mat.onBeforeCompile = (shader) => {
+    // Reuse the existing roughness map as a clearcoat mask.
     shader.fragmentShader = shader.fragmentShader.replace(
       'float clearcoat = material.clearcoat;',
       `float clearcoat = material.clearcoat;
@@ -1245,20 +1246,29 @@ function applyInvertedRoughnessClearcoatMask(mat) {
 #endif`
     );
 
-    // Matte regions such as the fretboard are already identified by the
-    // roughness map. Raise only their effective IBL roughness before Three.js
-    // samples the PMREM, instead of modifying internal radiance variables.
-    // This keeps the shader on Three.js' supported physical-lighting path.
+    // Reuse the same map to reduce IBL only on matte pixels.  Do this at the
+    // indirect-specular accumulation line, where reflectedLight is already in
+    // scope, instead of touching Three.js' internal radiance variables.
     shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <roughnessmap_fragment>',
-      `#include <roughnessmap_fragment>
-#ifdef USE_ROUGHNESSMAP
-  float kaniMatteMask = texture2D( roughnessMap, vRoughnessMapUv ).g;
-  roughnessFactor = mix( roughnessFactor, 1.0, kaniMatteMask * 0.85 );
-#endif`
+      'reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir, clearcoatF0, clearcoatF90, clearcoatRoughness );',
+      `#ifdef USE_ROUGHNESSMAP
+  float kaniIblMask = mix( 1.0, 0.28, texture2D( roughnessMap, vRoughnessMapUv ).g );
+#else
+  float kaniIblMask = 1.0;
+#endif
+reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir, clearcoatF0, clearcoatF90, clearcoatRoughness ) * kaniIblMask;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir );',
+      `#ifdef USE_ROUGHNESSMAP
+  float kaniBaseIblMask = mix( 1.0, 0.28, texture2D( roughnessMap, vRoughnessMapUv ).g );
+#else
+  float kaniBaseIblMask = 1.0;
+#endif
+reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir ) * kaniBaseIblMask;`
     );
   };
-  mat.customProgramCacheKey = () => 'kani-clearcoat-matte-ibl-v3';
+  mat.customProgramCacheKey = () => 'kani-roughness-ibl-mask-v4';
 }
 
 function applyLightingDiagnostic() {
