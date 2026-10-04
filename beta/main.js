@@ -1242,8 +1242,19 @@ function applyInvertedRoughnessClearcoatMask(mat) {
   clearcoat *= (1.0 - texture2D( roughnessMap, vRoughnessMapUv ).g);
 #endif`
     );
+    // The roughness map already identifies matte areas such as the fretboard.
+    // Reuse it to reduce only their IBL contribution, avoiding another texture.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <envmap_physical_pars_fragment>',
+      `#include <envmap_physical_pars_fragment>
+#ifdef USE_ROUGHNESSMAP
+  float kaniRoughnessMask = texture2D( roughnessMap, vRoughnessMapUv ).g;
+  radiance *= mix(1.0, 0.22, kaniRoughnessMask);
+  irradiance *= mix(1.0, 0.35, kaniRoughnessMask);
+#endif`
+    );
   };
-  mat.customProgramCacheKey = () => 'kani-inverse-roughness-clearcoat-v1';
+  mat.customProgramCacheKey = () => 'kani-roughness-clearcoat-and-ibl-v2';
 }
 
 function applyRenderQualityMode(mode) {
