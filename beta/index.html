@@ -13,9 +13,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
   <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
-<title>カニギター カメラ v1.35.4 beta</title>
+<title>カニギター カメラ v1.35.5 beta</title>
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-user-drag: none;
+    }
     html, body {
       margin: 0;
       width: 100%;
@@ -940,7 +946,7 @@
       <button id="renderCompareBtn" style="display:none">画質比較</button>
       <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.35.4 beta</div>
+      <div class="menu-version">Kani Camera v1.35.5 beta</div>
     </div>
     
     <div id="renderComparePanel" aria-label="画質比較">
@@ -1217,7 +1223,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.35.4 beta</div>
+      <div class="start-version">Kani Camera v1.35.5 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
