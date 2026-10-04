@@ -372,40 +372,6 @@ pmremGenerator.compileEquirectangularShader();
 const studioEnvironment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 pmremGenerator.dispose();
 
-// Small chrome-ball IBL monitor in the lighting panel.
-const iblPreviewCanvas = document.getElementById('iblPreviewCanvas');
-let iblPreviewRenderer = null;
-let iblPreviewScene = null;
-let iblPreviewCamera = null;
-let iblPreviewMaterial = null;
-let iblPreviewStudioEnvironment = null;
-if (iblPreviewCanvas) {
-  iblPreviewRenderer = new THREE.WebGLRenderer({ canvas: iblPreviewCanvas, alpha: true, antialias: true });
-  iblPreviewRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  iblPreviewRenderer.setSize(76, 76, false);
-  iblPreviewRenderer.setClearColor(0x000000, 0);
-  iblPreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
-  iblPreviewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-  iblPreviewRenderer.toneMappingExposure = 1.08;
-  // Render-target textures belong to the WebGL renderer that created them.
-  // Build a separate studio PMREM for this second renderer.
-  const previewPmrem = new THREE.PMREMGenerator(iblPreviewRenderer);
-  iblPreviewStudioEnvironment = previewPmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  previewPmrem.dispose();
-  iblPreviewScene = new THREE.Scene();
-  iblPreviewCamera = new THREE.PerspectiveCamera(30, 1, 0.1, 10);
-  iblPreviewCamera.position.set(0, 0, 3.2);
-  iblPreviewMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    metalness: 1,
-    roughness: 0,
-    envMap: iblPreviewStudioEnvironment,
-    envMapIntensity: 1.0
-  });
-  const previewSphere = new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), iblPreviewMaterial);
-  iblPreviewScene.add(previewSphere);
-}
-
 // v1.13: real-time projected shadow onto a transparent virtual floor.
 // PCF soft shadows are light enough for live iPhone preview and are also
 // included in the high-resolution capture pass.
@@ -1478,7 +1444,7 @@ function updateLiveEnvironment(now) {
 
   // iOS Safari does not reliably refresh a CubeTexture whose canvas faces
   // are mutated in place. Recreate the texture object, just like the working
-  // IBL preview renderer does.
+  // live environment update path does.
   const previousLiveEnvMap = liveEnvMap;
   liveEnvMap = new THREE.CubeTexture(envCanvases);
   liveEnvMap.colorSpace = THREE.SRGBColorSpace;
@@ -1670,30 +1636,6 @@ function render(now = 0) {
     });
   }
   renderer.render(scene, camera);
-  if (iblPreviewRenderer && iblPreviewMaterial && lightPanel.classList.contains('open')) {
-    if (iblSourceState === 'photo') {
-      // Recreate the tiny CubeTexture in this renderer when the live canvases change.
-      // This is cheap (6 x 64px) and avoids cross-context texture caching on iOS Safari.
-      const previewCube = new THREE.CubeTexture(envCanvases);
-      previewCube.colorSpace = THREE.SRGBColorSpace;
-      previewCube.needsUpdate = true;
-      const oldMap = iblPreviewMaterial.envMap;
-      iblPreviewMaterial.envMap = previewCube;
-      if (oldMap && oldMap !== iblPreviewStudioEnvironment) oldMap.dispose();
-    } else {
-      iblPreviewMaterial.envMap = iblPreviewStudioEnvironment;
-    }
-    if (iblPreviewMaterial.envMapRotation) {
-      const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
-      iblPreviewMaterial.envMapRotation.set(
-        useIblRotation ? THREE.MathUtils.degToRad(Number(lightElevation.value)) : 0,
-        useIblRotation ? THREE.MathUtils.degToRad(Number(lightAzimuth.value)) : 0,
-        0
-      );
-    }
-    iblPreviewMaterial.needsUpdate = true;
-    iblPreviewRenderer.render(iblPreviewScene, iblPreviewCamera);
-  }
 }
 requestAnimationFrame(render);
 
