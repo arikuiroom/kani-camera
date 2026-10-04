@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="ja">
 <head>
+  <!-- production: v1.35.10 -->
   <meta charset="utf-8" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
@@ -8,14 +9,19 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#111111" />
-  <link rel="manifest" href="./manifest.webmanifest?v=1.25.2" />
-  <meta name="apple-mobile-web-app-title" content="カニギターカメラ" />
+  <meta name="apple-mobile-web-app-title" content="カニギター β" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png?v=1.9.1" />
-  <link rel="icon" type="image/png" sizes="48x48" href="./favicon.png?v=1.9.1" />
-<title>カニギターカメラ v1.25.2</title>
+  <link rel="apple-touch-icon" sizes="192x192" href="../icon-192.png?v=1.9.1" />
+  <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png?v=1.9.1" />
+<title>カニギター カメラ v1.35.10</title>
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-user-drag: none;
+    }
     html, body {
       margin: 0;
       width: 100%;
@@ -301,7 +307,7 @@
       left: 14px;
       bottom: max(20px, env(safe-area-inset-bottom));
     }
-    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel, #savePanel {
+    #lightPanel, #fovPanel, #colorPanel, #inputPanel, #shadowPanel, #blendPanel, #floorPanel, #savePanel, #renderComparePanel {
       display: none;
       position: absolute;
       top: calc(max(12px, env(safe-area-inset-top)) + 52px);
@@ -316,7 +322,42 @@
       -webkit-backdrop-filter: blur(4px);
       box-shadow: 0 6px 24px rgba(0,0,0,.10);
     }
-    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open, #savePanel.open { display: block; }
+    #lightPanel.open, #fovPanel.open, #colorPanel.open, #inputPanel.open, #shadowPanel.open, #blendPanel.open, #floorPanel.open, #savePanel.open, #renderComparePanel.open { display: block; }
+
+    /* Lighting has grown into the most detailed panel, so keep it compact
+       enough to leave the subject visible while adjusting it. */
+    #lightPanel {
+      width: min(270px, calc(100vw - 24px));
+      padding: 10px 12px;
+      border-radius: 15px;
+    }
+    #lightPanel .light-head,
+    #lightPanel .auto-row { font-size: 16px; margin-bottom: 6px; }
+    #lightPanel .light-row {
+      grid-template-columns: 70px 1fr 38px;
+      gap: 6px;
+      margin: 5px 0;
+      font-size: 15px;
+    }
+    #lightPanel .light-row select,
+    #lightPanel .light-row button { font-size: 13px; min-height: 32px; padding: 5px 8px; }
+    #lightPanel .environment-row {
+      grid-template-columns: 65px 72px minmax(100px, 1fr);
+    }
+    #lightPanel #scanEnvironmentStatus {
+      text-align: center;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    #lightPanel #scanEnvironmentBtn {
+      min-height: 34px;
+      height: 34px;
+      padding: 5px 9px;
+      line-height: 1;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    #lightPanel .light-row input[type="range"] { height: 24px; }
 
     .format-grid {
       display: grid;
@@ -471,6 +512,32 @@
       font-size: 18px;
     }
     .light-row input[type="range"] { width: 100%; pointer-events: auto; touch-action: pan-x; }
+    .light-direction-wrap { margin-top: 3px; display:block; }
+    .light-direction-pad {
+      position: relative;
+      width: 100%;
+      height: 112px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.18);
+      touch-action: none;
+      overflow: hidden;
+    }
+    .light-direction-pad.disabled { opacity: .4; pointer-events: none; }
+    .dir-cross-x, .dir-cross-y { position:absolute; background:rgba(255,255,255,.16); pointer-events:none; }
+    .dir-cross-x { left:0; right:0; top:50%; height:1px; }
+    .dir-cross-y { top:0; bottom:0; left:50%; width:1px; }
+    .dir-label { position:absolute; font-size:11px; opacity:.55; pointer-events:none; }
+    .dir-top { top:5px; left:50%; transform:translateX(-50%); }
+    .dir-bottom { bottom:5px; left:50%; transform:translateX(-50%); }
+    .dir-left { left:7px; top:50%; transform:translateY(-50%); }
+    .dir-right { right:7px; top:50%; transform:translateY(-50%); }
+    .light-direction-knob {
+      position:absolute; width:26px; height:26px; border-radius:50%;
+      background:white; border:3px solid rgba(0,0,0,.28);
+      box-shadow:0 2px 8px rgba(0,0,0,.28);
+      transform:translate(-50%,-50%); pointer-events:none;
+    }
     .light-row output {
       text-align: right;
       font-variant-numeric: tabular-nums;
@@ -777,7 +844,7 @@
       }
       #morePanel,
       #lightPanel, #fovPanel, #colorPanel, #inputPanel,
-      #shadowPanel, #blendPanel, #floorPanel, #savePanel {
+      #shadowPanel, #blendPanel, #floorPanel, #savePanel, #renderComparePanel {
         top: max(12px, env(safe-area-inset-top));
         left: calc(max(8px, env(safe-area-inset-left)) + 82px);
         right: auto;
@@ -813,6 +880,41 @@
         flex-wrap: wrap;
       }
     }
+    #helpOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      background: rgba(0,0,0,.88);
+      pointer-events: auto;
+      align-items: center;
+      justify-content: center;
+      padding: max(56px, calc(env(safe-area-inset-top) + 44px)) 14px max(18px, env(safe-area-inset-bottom));
+    }
+    #helpOverlay.open { display: flex; }
+    #helpOverlay img {
+      display: block;
+      max-width: min(94vw, 720px);
+      max-height: calc(100dvh - max(74px, calc(env(safe-area-inset-top) + 62px)) - max(18px, env(safe-area-inset-bottom)));
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 10px;
+      background: white;
+    }
+    #closeHelpBtn {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 9;
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      background: rgba(0,0,0,.72);
+    }
   </style>
 </head>
 <body>
@@ -838,10 +940,25 @@
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
+      <button id="renderCompareBtn" style="display:none">画質比較</button>
+      <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.25.2</div>
+      <div class="menu-version">Kani Camera v1.35.10</div>
     </div>
     
+    <div id="renderComparePanel" aria-label="画質比較">
+      <div class="light-head">
+        <span>画質比較</span>
+        <button id="closeRenderCompareBtn" class="panel-close" aria-label="閉じる">×</button>
+      </div>
+      <div class="format-grid" style="grid-template-columns:1fr;">
+        <button class="format-choice render-choice active" data-render-mode="current">A　現在</button>
+        <button class="format-choice render-choice" data-render-mode="ibl">B　IBL・環境反射強化</button>
+        <button class="format-choice render-choice" data-render-mode="coat">C　IBL＋クリアコート</button>
+      </div>
+      <p class="format-note">同じ構図のまま切り替えて、金属の反射と赤い塗装のツヤを比較できます。</p>
+    </div>
+
     <div id="savePanel" aria-label="保存設定">
       <div class="light-head">
         <span>保存形式</span>
@@ -886,20 +1003,42 @@
         </div>
       </div>
       <div class="light-row">
+        <label>質感テスト</label>
+        <button id="chromeTestBtn" type="button" style="grid-column:2 / 4">鏡面シルバー</button>
+      </div>
+      <div class="light-row environment-row">
+        <label>環境光</label>
+        <output id="scanEnvironmentStatus">スタジオ</output>
+        <button id="scanEnvironmentBtn" type="button">ライブに戻す</button>
+      </div>
+      <div class="light-row">
+        <label for="lightMethod">方式</label>
+        <select id="lightMethod">
+          <option value="ibl">IBL回転</option>
+          <option value="light">ライト</option>
+          <option value="both" selected>両方</option>
+        </select>
+      </div>
+      <div class="light-row">
         <label for="lightPower">明るさ</label>
-        <input id="lightPower" type="range" min="0.3" max="3.5" step="0.05" value="2.2" />
+        <input id="lightPower" type="range" min="0" max="10" step="0.1" value="2.2" />
         <output id="lightPowerOut">2.20</output>
       </div>
-      <div class="light-row">
-        <label for="lightAzimuth">左右</label>
-        <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" />
-        <output id="lightAzimuthOut">27°</output>
+      <div class="light-direction-wrap">
+        <div id="lightDirectionPad" class="light-direction-pad" aria-label="照明方向">
+          <span class="dir-label dir-top">上</span>
+          <span class="dir-label dir-left">左</span>
+          <span class="dir-label dir-right">右</span>
+          <span class="dir-label dir-bottom">下</span>
+          <div class="dir-cross-x"></div>
+          <div class="dir-cross-y"></div>
+          <div id="lightDirectionKnob" class="light-direction-knob"></div>
+        </div>
       </div>
-      <div class="light-row">
-        <label for="lightElevation">上下</label>
-        <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" />
-        <output id="lightElevationOut">31°</output>
-      </div>
+      <input id="lightAzimuth" type="range" min="-180" max="180" step="1" value="27" hidden />
+      <output id="lightAzimuthOut" hidden>27°</output>
+      <input id="lightElevation" type="range" min="-60" max="80" step="1" value="31" hidden />
+      <output id="lightElevationOut" hidden>31°</output>
       <p id="lightNote" class="light-note" style="display:none"></p>
     </div>
     <div id="fovPanel" aria-label="FOV設定">
@@ -1022,7 +1161,7 @@
         <output id="shadowLengthOut"></output>
       </div>
     </div>
-    <div id="blendPanel" aria-label="背景なじみ設定">
+    <div id="blendPanel" aria-label="環境なじみ設定">
       <div class="light-head">
         <span>なじみ</span>
         <div class="panel-head-actions">
@@ -1050,6 +1189,11 @@
     <button id="resetBtn" aria-label="位置を戻す"><svg class="tool-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 10a9 9 0 1 1-1 11"/><path d="M9 10H4V5"/></svg>リセット</button>
   </div>
 
+  <div id="helpOverlay" aria-label="使い方" role="dialog" aria-modal="true">
+    <img id="helpImage" src="./help-placeholder.svg?v=1.26.1" alt="カニギターカメラの使い方" />
+    <button id="closeHelpBtn" class="panel-close" aria-label="使い方を閉じる">×</button>
+  </div>
+
   <div id="preview">
     <img id="previewImg" alt="撮影プレビュー" />
     <div class="preview-side">
@@ -1072,7 +1216,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.25.2</div>
+      <div class="start-version">Kani Camera v1.35.10</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
@@ -1092,7 +1236,11 @@
   }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/ag-psd@6.2.0/dist/bundle.js"></script>
-  <script type="module" src="./main.js?v=1.25.2"></script>
+  <script type="module">
+    // Beta always asks for the latest main.js instead of reusing an old Safari cache entry.
+    const betaBuild = Date.now();
+    import(`./main.js?beta=${betaBuild}`);
+  </script>
   <script>
     const reloadLatest = () => {
       const url = new URL(location.href);
