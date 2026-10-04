@@ -373,7 +373,7 @@ pmremGenerator.compileEquirectangularShader();
 
 new RGBELoader()
   .setPath('./')
-  .load('studio_small_02_1k.hdr', (hdrTexture) => {
+  .load('../textures/environment/studio_small_02_1k.hdr', (hdrTexture) => {
     const previousStudioEnvironment = studioEnvironment;
     studioEnvironment = pmremGenerator.fromEquirectangular(hdrTexture).texture;
     hdrTexture.dispose();
