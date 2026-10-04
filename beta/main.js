@@ -1209,8 +1209,10 @@ colorTextures.red = redTexture;
 // Metallic/Roughness are shared by every color, so they still load once at startup.
 const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
 const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
+const normalTexture = textureLoader.load('../textures/KA23_Normal.png');
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
+normalTexture.flipY = true;
 
 let currentColorKey = 'red';
 
@@ -1546,6 +1548,8 @@ loader.load(
         map: colorTextures[currentColorKey],
         metalnessMap: metallicTexture,
         roughnessMap: roughnessTexture,
+        normalMap: normalTexture,
+        normalScale: new THREE.Vector2(0.65, 0.65),
         // Slightly under 1.0 on purpose: keeps a small diffuse contribution
         // so very dark metallic texels do not collapse to pure black.
         metalness: METALNESS_GAIN,
