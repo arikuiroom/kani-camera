@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const video = document.getElementById('camera');
 const photoBackground = document.getElementById('photoBackground');
@@ -363,13 +362,46 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 
-// Neutral studio IBL used only by the Beta B/C comparison modes.
-// PMREM turns the room lighting into reflection data suited to PBR materials.
-// It lights/reflection-maps the model without drawing a studio background,
-// so the camera/photo behind the crab guitar stays exactly the same.
+// Kani Guitar studio IBL: a darker neutral room with narrow softboxes.
+// Unlike RoomEnvironment, this avoids huge white wall/floor reflections and
+// gives the painted shell longer, cleaner product-photo highlights.
+function makeKaniStudioEnvironment() {
+  const envScene = new THREE.Scene();
+  envScene.background = new THREE.Color(0x242526);
+
+  const roomMat = new THREE.MeshBasicMaterial({ color: 0x343638, side: THREE.BackSide });
+  const room = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 12), roomMat);
+  envScene.add(room);
+
+  const panelMat = (intensity = 1) => new THREE.MeshBasicMaterial({
+    color: new THREE.Color(1.0 * intensity, 0.96 * intensity, 0.90 * intensity),
+    side: THREE.DoubleSide
+  });
+  const addPanel = (w, h, x, y, z, ry, intensity) => {
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(w, h), panelMat(intensity));
+    panel.position.set(x, y, z);
+    panel.rotation.y = ry;
+    envScene.add(panel);
+  };
+
+  // Tall side strips create controlled highlights instead of broad white walls.
+  addPanel(1.0, 4.4, -4.7, 0.7, 0.2, Math.PI / 2, 0.88);
+  addPanel(0.85, 3.8, 4.7, 0.4, -0.8, -Math.PI / 2, 0.68);
+
+  // A softer overhead strip gives metal parts definition without whitening paint.
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.9), panelMat(0.55));
+  top.position.set(0.5, 3.65, 0.4);
+  top.rotation.x = Math.PI / 2;
+  envScene.add(top);
+
+  // Small front kicker keeps the bridge/pegs readable.
+  addPanel(1.2, 1.6, -1.8, 0.1, 5.5, 0, 0.34);
+  return envScene;
+}
+
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
-const studioEnvironment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+const studioEnvironment = pmremGenerator.fromScene(makeKaniStudioEnvironment(), 0.04).texture;
 pmremGenerator.dispose();
 
 // v1.13: real-time projected shadow onto a transparent virtual floor.
