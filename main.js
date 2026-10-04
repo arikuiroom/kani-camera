@@ -1168,11 +1168,11 @@ const textureLoader = new THREE.TextureLoader();
 // Previously the top-level await here meant that, after the camera opened,
 // most controls had no event listeners until every texture finished loading.
 const colorTextureUrls = {
-  red: '../textures/KA23_Red_Albedo.png',
-  mint: '../textures/KA23_Mint_Albedo.png',
-  black: '../textures/KA23_Black_Albedo.png',
-  darkBrown: '../textures/KA23_DarkBrown_Albedo.png',
-  redBrown: '../textures/KA23_RedBrown_Albedo.png'
+  red: './textures/KA23_Red_Albedo.png',
+  mint: './textures/KA23_Mint_Albedo.png',
+  black: './textures/KA23_Black_Albedo.png',
+  darkBrown: './textures/KA23_DarkBrown_Albedo.png',
+  redBrown: './textures/KA23_RedBrown_Albedo.png'
 };
 
 // Only red is requested at startup. Other Albedo textures are downloaded on
@@ -1207,9 +1207,9 @@ const redTexture = prepareColorTexture(textureLoader.load(colorTextureUrls.red))
 colorTextures.red = redTexture;
 
 // Metallic/Roughness are shared by every color, so they still load once at startup.
-const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
-const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
-const normalTexture = textureLoader.load('../textures/KA23_Normal.png');
+const metallicTexture = textureLoader.load('./textures/KA23_Solid_Metallic.png');
+const roughnessTexture = textureLoader.load('./textures/KA23_Solid_Roughness.png');
+const normalTexture = textureLoader.load('./textures/KA23_Normal.png');
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
 normalTexture.flipY = true;
@@ -1531,7 +1531,7 @@ async function setKaniColor(colorKey) {
 
 const loader = new FBXLoader();
 loader.load(
-  '../models/CrabGuitarKA23_High.fbx',
+  './models/CrabGuitarKA23_High.fbx',
   (fbx) => {
     model = fbx;
 
