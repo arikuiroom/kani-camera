@@ -1351,7 +1351,7 @@ function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 500) return; // power-saving: 2 IBL updates/sec
+  if (now - lastEnvUpdate < 1000) return; // power-saving: 1 IBL update/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
@@ -1394,6 +1394,24 @@ function updateLiveEnvironment(now) {
     tempCtx.drawImage(source, 0, 0, metrics.width, metrics.height);
     const liveData = tempCtx.getImageData(0, 0, metrics.width, metrics.height);
 
+    const sampleRGB = (data, sw, sh, x, y) => {
+      const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
+      const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
+      const si = (iy * sw + ix) * 4;
+      const rr = data.data[si] / 255;
+      const gg = data.data[si+1] / 255;
+      const bb = data.data[si+2] / 255;
+      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+      const highlight = THREE.MathUtils.smoothstep(lum, 0.72, 0.98);
+      const gain = 1.02 + highlight * highlight * 0.48;
+      return [Math.min(1, rr * gain), Math.min(1, gg * gain), Math.min(1, bb * gain)];
+    };
+    const writeRGB = (rgb, di) => {
+      out.data[di] = rgb[0] * 255;
+      out.data[di+1] = rgb[1] * 255;
+      out.data[di+2] = rgb[2] * 255;
+      out.data[di+3] = 255;
+    };
     const sample = (data, sw, sh, x, y, di) => {
       const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
       const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
@@ -1421,7 +1439,7 @@ function updateLiveEnvironment(now) {
         const inv = 1 / Math.hypot(dx,dy,dz);
         dx*=inv; dy*=inv; dz*=inv;
         const useRear = dz >= 0 || dualScanPhase !== 2 || !rearData;
-        const localZ = useRear ? Math.abs(dz) : Math.abs(dz);
+        const localZ = Math.abs(dz);
         // Perspective-like hemisphere mapping: center = straight ahead,
         // rim = 90 degrees from the camera axis.
         const denom = Math.max(0.001, localZ + 0.34);
@@ -1430,13 +1448,21 @@ function updateLiveEnvironment(now) {
         sx = THREE.MathUtils.clamp(sx, 0, 1);
         sy = THREE.MathUtils.clamp(sy, 0, 1);
         const di = (py * ENV_SIZE + px) * 4;
-        if (useRear && rearData && dualScanPhase === 2) {
-          sample(rearData, rearScanImage.width, rearScanImage.height, sx, sy, di);
+        if (rearData && dualScanPhase === 2) {
+          // Blend both camera hemispheres around the equator instead of making
+          // a hard rear/front cut. About a 20-degree band hides exposure/color
+          // differences between the two iPhone cameras.
+          const rearRGB = sampleRGB(rearData, rearScanImage.width, rearScanImage.height, sx, sy);
+          const frontRGB = sampleRGB(liveData, metrics.width, metrics.height, 1 - sx, sy);
+          const blendHalfWidth = 0.18;
+          const rearWeight = THREE.MathUtils.smoothstep(dz, -blendHalfWidth, blendHalfWidth);
+          writeRGB([
+            THREE.MathUtils.lerp(frontRGB[0], rearRGB[0], rearWeight),
+            THREE.MathUtils.lerp(frontRGB[1], rearRGB[1], rearWeight),
+            THREE.MathUtils.lerp(frontRGB[2], rearRGB[2], rearWeight)
+          ], di);
         } else {
-          // Opposite hemisphere is front-camera capture; mirror horizontally
-          // so left/right remain continuous around the viewer.
-          sample(liveData, metrics.width, metrics.height,
-            (!useRear && dualScanPhase === 2) ? 1 - sx : sx, sy, di);
+          sample(liveData, metrics.width, metrics.height, sx, sy, di);
         }
       }
     }
