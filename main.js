@@ -1229,6 +1229,46 @@ const ENV_MIN_BRIGHTNESS = 0.34;
 // B = neutral PMREM studio IBL: stronger, more coherent metal/paint highlights.
 // C = the same IBL plus a clear top coat for painted/glossy surfaces.
 let renderQualityMode = 'coat';
+// Reuse the existing roughness map as an inverse clearcoat mask without
+// loading another image: rough/white areas (e.g. the fretboard) lose clearcoat,
+// while smooth/dark painted areas keep it.
+function applyInvertedRoughnessClearcoatMask(mat) {
+  if (!mat?.isMeshPhysicalMaterial) return;
+  mat.onBeforeCompile = (shader) => {
+    // Reuse the existing roughness map as a clearcoat mask.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'float clearcoat = material.clearcoat;',
+      `float clearcoat = material.clearcoat;
+#ifdef USE_ROUGHNESSMAP
+  clearcoat *= (1.0 - texture2D( roughnessMap, vRoughnessMapUv ).g);
+#endif`
+    );
+
+    // Reuse the same map to reduce IBL only on matte pixels.  Do this at the
+    // indirect-specular accumulation line, where reflectedLight is already in
+    // scope, instead of touching Three.js' internal radiance variables.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir, clearcoatF0, clearcoatF90, clearcoatRoughness );',
+      `#ifdef USE_ROUGHNESSMAP
+  float kaniIblMask = mix( 1.0, 0.28, texture2D( roughnessMap, vRoughnessMapUv ).g );
+#else
+  float kaniIblMask = 1.0;
+#endif
+reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir, clearcoatF0, clearcoatF90, clearcoatRoughness ) * kaniIblMask;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      'reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir );',
+      `#ifdef USE_ROUGHNESSMAP
+  float kaniBaseIblMask = mix( 1.0, 0.28, texture2D( roughnessMap, vRoughnessMapUv ).g );
+#else
+  float kaniBaseIblMask = 1.0;
+#endif
+reflectedLight.indirectSpecular += radiance * BRDF_GGX( material, geometryNormal, geometryViewDir ) * kaniBaseIblMask;`
+    );
+  };
+  mat.customProgramCacheKey = () => 'kani-roughness-ibl-mask-v4';
+}
+
 function applyRenderQualityMode(mode) {
   renderQualityMode = mode;
   if (!model) return;
@@ -1273,6 +1313,7 @@ function applyRenderQualityMode(mode) {
       if (mat.isMeshPhysicalMaterial) {
         mat.clearcoat = wantsCoat ? 0.58 : 0;
         mat.clearcoatRoughness = wantsCoat ? 0.18 : 0;
+        applyInvertedRoughnessClearcoatMask(mat);
       }
       mat.needsUpdate = true;
     });
