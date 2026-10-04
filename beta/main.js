@@ -1324,7 +1324,7 @@ function applyRenderQualityMode(mode) {
 // For this lightweight Web version we build a small CubeTexture from several
 // cropped copies of the live camera image. It is not physically exact, but it
 // lets shiny/metallic areas pick up the color and brightness of the surroundings.
-const ENV_SIZE = 256;
+const ENV_SIZE = 64;
 const envCanvases = Array.from({ length: 6 }, () => {
   const c = document.createElement('canvas');
   c.width = ENV_SIZE;
@@ -1351,7 +1351,7 @@ function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 1000) return; // power-saving: about 1 update/sec
+  if (now - lastEnvUpdate < 500) return; // power-saving: 2 IBL updates/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
