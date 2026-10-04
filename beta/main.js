@@ -770,7 +770,7 @@ const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: 
 let lastLightSample = 0;
 let autoLightingEnabled = true;
 let lightMethodState = 'both';
-let iblSourceState = 'photo';
+let iblSourceState = 'studio';
 let environmentScanFrozen = false;
 let dualScanPhase = 0;
 let rearScanImage = null;
@@ -1245,7 +1245,7 @@ function applyRenderQualityMode(mode) {
         // paint keeps its red color instead of clipping toward white on iPhone.
         // C can stay slightly stronger because clearcoat separates the glossy
         // top reflection from the colored base layer.
-        mat.envMapIntensity = mode === 'coat' ? 0.55 : 0.50;
+        mat.envMapIntensity = iblSourceState === 'studio' ? (mode === 'coat' ? 0.38 : 0.35) : (mode === 'coat' ? 0.55 : 0.50);
       }
 
       if (mat.isMeshPhysicalMaterial) {
