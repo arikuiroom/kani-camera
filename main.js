@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 const video = document.getElementById('camera');
 const photoBackground = document.getElementById('photoBackground');
@@ -87,7 +88,14 @@ const lightAzimuth = document.getElementById('lightAzimuth');
 const lightAzimuthOut = document.getElementById('lightAzimuthOut');
 const lightElevation = document.getElementById('lightElevation');
 const lightElevationOut = document.getElementById('lightElevationOut');
+const lightDirectionPad = document.getElementById('lightDirectionPad');
+const lightDirectionKnob = document.getElementById('lightDirectionKnob');
 const lightNote = document.getElementById('lightNote');
+const lightMethod = document.getElementById('lightMethod');
+const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
+const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
+const chromeTestBtn = document.getElementById('chromeTestBtn');
+let chromeTestEnabled = false;
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -97,6 +105,13 @@ const fallbackBackgroundSave = document.getElementById('fallbackBackgroundSave')
 const closePreview = document.getElementById('closePreview');
 const saveHelp = document.getElementById('saveHelp');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const renderCompareBtn = document.getElementById('renderCompareBtn');
+const renderComparePanel = document.getElementById('renderComparePanel');
+const closeRenderCompareBtn = document.getElementById('closeRenderCompareBtn');
+const renderChoices = [...document.querySelectorAll('.render-choice')];
+const helpBtn = document.getElementById('helpBtn');
+const helpOverlay = document.getElementById('helpOverlay');
+const closeHelpBtn = document.getElementById('closeHelpBtn');
 const savePanel = document.getElementById('savePanel');
 const closeSaveBtn = document.getElementById('closeSaveBtn');
 const formatJpegBtn = document.getElementById('formatJpegBtn');
@@ -347,6 +362,35 @@ renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
+
+// Studio IBL: Poly Haven "Studio Small 02" (CC0), stored locally.
+// Start with no environment, then replace it with the PMREM-filtered HDRI
+// as soon as the 1K file finishes loading. The camera/photo remains visible
+// because the HDRI is used only for material reflections/lighting.
+let studioEnvironment = null;
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+
+new RGBELoader()
+  .setPath('./')
+  .load('studio_small_02_1k.hdr', (hdrTexture) => {
+    const previousStudioEnvironment = studioEnvironment;
+    studioEnvironment = pmremGenerator.fromEquirectangular(hdrTexture).texture;
+    hdrTexture.dispose();
+    pmremGenerator.dispose();
+
+    if (previousStudioEnvironment) previousStudioEnvironment.dispose();
+
+    // Rebind immediately when Studio is the active environment.
+    if (iblSourceState === 'studio') {
+      applyRenderQualityMode(renderQualityMode);
+      if (chromeTestEnabled) applyChromeTestMode();
+      renderer.render(scene, camera);
+    }
+  }, undefined, (error) => {
+    console.error('Studio HDRI load failed:', error);
+    pmremGenerator.dispose();
+  });
 
 // v1.13: real-time projected shadow onto a transparent virtual floor.
 // PCF soft shadows are light enough for live iPhone preview and are also
@@ -745,6 +789,12 @@ lightSampleCanvas.height = 24;
 const lightSampleCtx = lightSampleCanvas.getContext('2d', { willReadFrequently: true });
 let lastLightSample = 0;
 let autoLightingEnabled = true;
+let lightMethodState = 'both';
+let iblSourceState = 'studio';
+let environmentScanFrozen = false;
+let dualScanPhase = 0;
+let rearScanImage = null;
+let rearScanMetrics = null;
 let blendEnabledState = true;
 let blendStrengthState = 0.75;
 const blendTint = new THREE.Color(1, 1, 1);
@@ -763,9 +813,40 @@ function setManualLightPosition() {
     Math.sin(el) * radius,
     Math.cos(az) * cosEl * radius
   );
+
+  // Rotate the studio IBL around the model when requested. Three.js applies
+  // this rotation to the environment reflection without moving the camera.
+  // The studio PMREM is assigned per material (mat.envMap), so rotating
+  // scene.environment does not rotate those reflections. Rotate each
+  // material's envMap instead.
+  const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
+  const envAzimuth = useIblRotation ? az : 0;
+  const envElevation = useIblRotation ? el : 0;
+  if (model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        // envMapRotation is Euler XYZ: X tilts the environment up/down,
+        // Y turns it left/right around the model.
+        if (mat && mat.envMapRotation) mat.envMapRotation.set(envElevation, envAzimuth, 0);
+      });
+    });
+  }
 }
 
 function setManualLighting() {
+  // v1.27.3 direction experiment: the slider can rotate the IBL, add a
+  // directional key light, or do both. Keep the key deliberately restrained.
+  if (renderQualityMode !== 'current') {
+    const power = Number(lightPower.value);
+    key.color.set(0xffffff);
+    key.intensity = (lightMethodState === 'light' || lightMethodState === 'both') ? power * 0.28 : 0;
+    fill.intensity = 0;
+    hemi.intensity = blendEnabledState ? 0.38 * blendStrengthState : 0;
+    setManualLightPosition();
+    return;
+  }
   const power = Number(lightPower.value);
   key.color.set(0xffffff);
   fill.color.set(0xffffff);
@@ -777,10 +858,21 @@ function setManualLighting() {
   setManualLightPosition();
 }
 
+function updateLightDirectionPad() {
+  if (!lightDirectionPad || !lightDirectionKnob) return;
+  const az = Number(lightAzimuth.value);
+  const el = Number(lightElevation.value);
+  const x = THREE.MathUtils.clamp((az + 180) / 360, 0, 1);
+  const y = THREE.MathUtils.clamp((80 - el) / 140, 0, 1);
+  lightDirectionKnob.style.left = `${x * 100}%`;
+  lightDirectionKnob.style.top = `${y * 100}%`;
+}
+
 function updateLightLabels() {
-  lightPowerOut.textContent = Number(lightPower.value).toFixed(2);
+  lightPowerOut.textContent = Number(lightPower.value).toFixed(1);
   lightAzimuthOut.textContent = `${Math.round(Number(lightAzimuth.value))}°`;
   lightElevationOut.textContent = `${Math.round(Number(lightElevation.value))}°`;
+  updateLightDirectionPad();
 }
 
 function updateLightControlState() {
@@ -788,9 +880,10 @@ function updateLightControlState() {
   lightAzimuth.disabled = autoLightingEnabled;
   lightElevation.disabled = autoLightingEnabled;
   lightPower.disabled = autoLightingEnabled;
+  if (lightDirectionPad) lightDirectionPad.classList.toggle('disabled', autoLightingEnabled);
   lightNote.textContent = autoLightingEnabled
-    ? 'AUTO中は、カメラ映像の平均色・明るさ・明るい方向を照明に反映します。'
-    : '手動中は、明るさと光の方向を自由に調整できます。';
+    ? 'AUTOは後で新方式に対応予定です。現在はなじみの明るさ・色追従が動作します。'
+    : '方式を選び、左右・上下で光の方向を比較できます。';
   if (!autoLightingEnabled) setManualLighting();
 }
 
@@ -841,10 +934,12 @@ function resetBackgroundBlend() {
   });
 }
 
-function updateAdaptiveLighting(now) {
+function updateAdaptiveLighting(now, instant = false) {
+  // v1.27.1 hybrid "なじみ": keep the clean studio PMREM/Clearcoat look,
+  // but let the real camera/photo gently influence IBL brightness and colour.
+  // The albedo itself is never tinted.
   const source = getActiveBackgroundSource();
-  if (!source) return;
-  if (!autoLightingEnabled && !blendEnabledState) return;
+  if (!source || !blendEnabledState) return;
   if (now - lastLightSample < 600) return;
   lastLightSample = now;
 
@@ -857,54 +952,93 @@ function updateAdaptiveLighting(now) {
   let r = 0, g = 0, b = 0, lumSum = 0;
   let brightWeight = 0, brightX = 0, brightY = 0;
   const count = w * h;
+  for (let i = 0; i < data.length; i += 4) {
+    const rr = data[i] / 255;
+    const gg = data[i + 1] / 255;
+    const bb = data[i + 2] / 255;
+    const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+    r += rr; g += gg; b += bb;
+    lumSum += lum;
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const rr = data[i] / 255;
-      const gg = data[i + 1] / 255;
-      const bb = data[i + 2] / 255;
-      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
-      r += rr; g += gg; b += bb; lumSum += lum;
-
-      // Emphasize the brightest areas to estimate a plausible key-light direction.
-      const weight = Math.max(0, lum - 0.45) ** 2;
-      brightWeight += weight;
-      brightX += (x / (w - 1) * 2 - 1) * weight;
-      brightY += (1 - y / (h - 1) * 2) * weight;
+    // Track only the brightest parts of the image. Their weighted centroid is
+    // treated as the likely dominant real-world light source.
+    const px = (i / 4) % w;
+    const py = Math.floor((i / 4) / w);
+    const weight = Math.max(0, lum - 0.68);
+    if (weight > 0) {
+      const ww = weight * weight;
+      brightWeight += ww;
+      brightX += px * ww;
+      brightY += py * ww;
     }
   }
-
   r /= count; g /= count; b /= count;
   const avgLum = lumSum / count;
+  const strength = blendStrengthState;
 
-  applyBackgroundBlend(r, g, b, avgLum);
-  sampledColor.setRGB(r, g, b);
-  if (autoLightingEnabled) {
-    // Mostly white, gently tinted by the environment so skin/paint colors do not go wild.
-    targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.32);
+  // Deliberately exaggerated v1.27.2 test: make environment matching obvious.
+  // Near-black scenes can almost extinguish the studio IBL; bright scenes can
+  // push it well above the normal 0.55 reference.
+  const matchedIBL = THREE.MathUtils.clamp(0.02 + avgLum * 1.05, 0.02, 0.82);
+  const baseIBL = iblSourceState === 'photo' ? 0.62 : 0.55;
+  const matchedPhotoIBL = THREE.MathUtils.clamp(0.38 + avgLum * 0.95, 0.42, 1.05);
+  const targetIBL = iblSourceState === 'photo'
+    ? THREE.MathUtils.lerp(baseIBL, matchedPhotoIBL, strength)
+    : THREE.MathUtils.lerp(0.55, matchedIBL, strength);
+
+  // Exaggerated colour-temperature test: make the camera/photo colour cast
+  // visibly affect ambient illumination without modifying the albedo itself.
+  const safeLum = Math.max(avgLum, 0.08);
+  sampledColor.setRGB(
+    THREE.MathUtils.clamp(r / safeLum, 0.65, 1.35),
+    THREE.MathUtils.clamp(g / safeLum, 0.65, 1.35),
+    THREE.MathUtils.clamp(b / safeLum, 0.65, 1.35)
+  );
+  targetLightColor.copy(neutralWhite).lerp(sampledColor, 0.62 * strength);
+  hemi.color.lerp(targetLightColor, 0.45);
+  hemi.groundColor.copy(hemi.color).multiplyScalar(0.55);
+
+  // v1.27.8: when using the camera/photo as the IBL, let the same real-world
+  // sample provide a soft diffuse fill as a separate layer. The photo IBL
+  // remains responsible for glossy reflections; this light simply keeps the
+  // base colour and neck readable in dim rooms.
+  const photoFill = iblSourceState === 'photo'
+    ? THREE.MathUtils.lerp(0.30, 0.82, THREE.MathUtils.clamp(avgLum * 1.8, 0, 1))
+    : 0.38 * THREE.MathUtils.clamp(avgLum * 2.0, 0.05, 1.0);
+  const targetHemi = photoFill * strength;
+  hemi.intensity = instant ? targetHemi : hemi.intensity + (targetHemi - hemi.intensity) * 0.35;
+
+  // v1.27.9 AUTO key-light experiment. For photo IBL, a bright window,
+  // monitor or ceiling lamp becomes a directional key from the same screen
+  // direction. This is deliberately visible so the first iPhone test can tell
+  // us whether the idea works.
+  if (iblSourceState === 'photo' && brightWeight > 0.002) {
+    const bx = brightX / brightWeight / Math.max(1, w - 1); // 0..1
+    const by = brightY / brightWeight / Math.max(1, h - 1); // 0..1
+    const nx = (bx - 0.5) * 2;
+    const ny = (0.5 - by) * 2;
+    const radius = 5;
+    key.position.set(nx * radius, ny * radius, 3.2);
     key.color.lerp(targetLightColor, 0.35);
-    fill.color.lerp(targetLightColor, 0.22);
-    hemi.color.lerp(targetLightColor, 0.18);
-  
-    // Map scene brightness to a restrained lighting range.
-    const autoPower = THREE.MathUtils.clamp(1.15 + avgLum * 2.35, 1.25, 3.15);
-    key.intensity += (autoPower - key.intensity) * 0.28;
-    fill.intensity += (autoPower * 0.38 - fill.intensity) * 0.22;
-    hemi.intensity += (1.25 + avgLum * 0.75 - hemi.intensity) * 0.20;
-  
-    if (brightWeight > 0.001) {
-      const nx = THREE.MathUtils.clamp(brightX / brightWeight, -1, 1);
-      const ny = THREE.MathUtils.clamp(brightY / brightWeight, -1, 1);
-      const desired = new THREE.Vector3(nx * 4.0, ny * 3.0 + 1.0, 4.0).normalize().multiplyScalar(5);
-      key.position.lerp(desired, 0.22);
-    }
-  
-    lightPower.value = key.intensity.toFixed(2);
-    lightPowerOut.textContent = key.intensity.toFixed(2);
+    const brightCoverage = THREE.MathUtils.clamp(brightWeight / count * 35, 0, 1);
+    const autoKey = THREE.MathUtils.lerp(0.45, 1.65, brightCoverage) * strength;
+    key.intensity = instant ? autoKey : key.intensity + (autoKey - key.intensity) * 0.4;
+  } else {
+    key.intensity *= 0.6;
   }
-}
+  fill.intensity = 0;
 
+  if (model) model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+        mat.color.setRGB(1, 1, 1);
+        mat.envMapIntensity = instant ? targetIBL : mat.envMapIntensity + (targetIBL - mat.envMapIntensity) * 0.55;
+      }
+    }
+  });
+}
 
 function getActiveBackgroundSource() {
   if (inputMode === 'photo' && photoBackground.naturalWidth > 0) return photoBackground;
@@ -958,6 +1092,7 @@ function closeTopPanels() {
   blendPanel.classList.remove('open');
   floorPanel.classList.remove('open');
   savePanel.classList.remove('open');
+  renderComparePanel.classList.remove('open');
 }
 
 function updateInputUI() {
@@ -1033,11 +1168,11 @@ const textureLoader = new THREE.TextureLoader();
 // Previously the top-level await here meant that, after the camera opened,
 // most controls had no event listeners until every texture finished loading.
 const colorTextureUrls = {
-  red: './textures/KA23_Red_Albedo.png',
-  mint: './textures/KA23_Mint_Albedo.png',
-  black: './textures/KA23_Black_Albedo.png',
-  darkBrown: './textures/KA23_DarkBrown_Albedo.png',
-  redBrown: './textures/KA23_RedBrown_Albedo.png'
+  red: '../textures/KA23_Red_Albedo.png',
+  mint: '../textures/KA23_Mint_Albedo.png',
+  black: '../textures/KA23_Black_Albedo.png',
+  darkBrown: '../textures/KA23_DarkBrown_Albedo.png',
+  redBrown: '../textures/KA23_RedBrown_Albedo.png'
 };
 
 // Only red is requested at startup. Other Albedo textures are downloaded on
@@ -1072,10 +1207,12 @@ const redTexture = prepareColorTexture(textureLoader.load(colorTextureUrls.red))
 colorTextures.red = redTexture;
 
 // Metallic/Roughness are shared by every color, so they still load once at startup.
-const metallicTexture = textureLoader.load('./textures/KA23_Solid_Metallic.png');
-const roughnessTexture = textureLoader.load('./textures/KA23_Solid_Roughness.png');
+const metallicTexture = textureLoader.load('../textures/KA23_Solid_Metallic.png');
+const roughnessTexture = textureLoader.load('../textures/KA23_Solid_Roughness.png');
+const normalTexture = textureLoader.load('../textures/KA23_Normal.png');
 metallicTexture.flipY = true;
 roughnessTexture.flipY = true;
+normalTexture.flipY = true;
 
 let currentColorKey = 'red';
 
@@ -1086,6 +1223,89 @@ const CAMERA_ENV_BLEND = 0.68;
 const ENV_REFLECTION_INTENSITY = 1.15;
 const METALNESS_GAIN = 0.88;
 const ENV_MIN_BRIGHTNESS = 0.34;
+
+// v1.26.1 visual A/B/C experiment.
+// A = production look: the existing lightweight live-camera reflection.
+// B = neutral PMREM studio IBL: stronger, more coherent metal/paint highlights.
+// C = the same IBL plus a clear top coat for painted/glossy surfaces.
+let renderQualityMode = 'coat';
+function applyRenderQualityMode(mode) {
+  renderQualityMode = mode;
+  if (!model) return;
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((oldMat, index) => {
+      if (!oldMat.isMeshStandardMaterial && !oldMat.isMeshPhysicalMaterial) return;
+
+      const wantsCoat = mode === 'coat';
+      let mat = oldMat;
+
+      // Switch material class only when C needs the extra clearcoat layer.
+      if (wantsCoat && !oldMat.isMeshPhysicalMaterial) {
+        mat = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(mat, oldMat);
+        if (Array.isArray(child.material)) child.material[index] = mat;
+        else child.material = mat;
+        oldMat.dispose();
+      } else if (!wantsCoat && oldMat.isMeshPhysicalMaterial) {
+        mat = new THREE.MeshStandardMaterial();
+        mat.copy(oldMat);
+        if (Array.isArray(child.material)) child.material[index] = mat;
+        else child.material = mat;
+        oldMat.dispose();
+      }
+
+      if (mode === 'current') {
+        // Exact current production reflection path.
+        mat.envMap = liveEnvMap;
+        mat.envMapIntensity = ENV_REFLECTION_INTENSITY;
+      } else {
+        // B/C use a proper prefiltered image-based lighting environment.
+        mat.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
+        // Keep the broad glossy reflection, but lower its energy so saturated
+        // paint keeps its red color instead of clipping toward white on iPhone.
+        // C can stay slightly stronger because clearcoat separates the glossy
+        // top reflection from the colored base layer.
+        mat.envMapIntensity = iblSourceState === 'studio' ? (mode === 'coat' ? 0.38 : 0.35) : (mode === 'coat' ? 0.55 : 0.50);
+      }
+
+      if (mat.isMeshPhysicalMaterial) {
+        mat.clearcoat = wantsCoat ? 0.58 : 0;
+        mat.clearcoatRoughness = wantsCoat ? 0.18 : 0;
+      }
+      mat.needsUpdate = true;
+    });
+  });
+  // Isolate B/C from the legacy lighting/blending controls. Returning to A
+  // immediately restores their current settings rather than changing them.
+  if (mode === 'current') {
+    if (blendEnabledState) {
+      lastLightSample = 0;
+    } else {
+      resetBackgroundBlend();
+    }
+    if (autoLightingEnabled) {
+      lastLightSample = 0;
+    } else {
+      setManualLighting();
+    }
+  } else {
+    resetBackgroundBlend();
+    key.intensity = 0;
+    fill.intensity = 0;
+    hemi.intensity = blendEnabledState ? 0.16 * blendStrengthState : 0;
+    lastLightSample = 0;
+  }
+
+  renderChoices.forEach((btn) => btn.classList.toggle('active', btn.dataset.renderMode === mode));
+  statusEl.textContent = mode === 'current'
+    ? '画質 A：現在'
+    : mode === 'ibl'
+      ? '画質 B：IBL反射'
+      : '画質 C：IBL＋クリアコート';
+  boostLiveFps();
+}
 
 // ---- Pseudo live environment reflection ----------------------------------
 // The phone camera is only a forward-facing image, not a true 360° environment.
@@ -1100,17 +1320,26 @@ const envCanvases = Array.from({ length: 6 }, () => {
   return c;
 });
 
-const liveEnvMap = new THREE.CubeTexture(envCanvases);
+let liveEnvMap = new THREE.CubeTexture(envCanvases);
 liveEnvMap.colorSpace = THREE.SRGBColorSpace;
 liveEnvMap.needsUpdate = true;
-
 let lastEnvUpdate = 0;
+
+function captureVideoFrameForScan() {
+  if (!video.videoWidth || !video.videoHeight) return null;
+  const c = document.createElement('canvas');
+  c.width = Math.min(512, video.videoWidth);
+  c.height = Math.max(1, Math.round(c.width * video.videoHeight / video.videoWidth));
+  const ctx = c.getContext('2d', { alpha: false });
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  return c;
+}
 
 function updateLiveEnvironment(now) {
   const source = getActiveBackgroundSource();
   const metrics = getSourceMetrics(source);
   if (!source || !metrics) return;
-  if (now - lastEnvUpdate < 1000) return; // power-saving: about 1 update/sec
+  if (now - lastEnvUpdate < 1000) return; // power-saving: 1 IBL update/sec
   lastEnvUpdate = now;
 
   const vw = metrics.width;
@@ -1123,47 +1352,137 @@ function updateLiveEnvironment(now) {
     const ctx = c.getContext('2d', { alpha: false });
     ctx.save();
 
-    // Neutral studio base: this is the important safety net that keeps metal
-    // reflective instead of turning black when camera coverage is incomplete.
-    const base = Math.round(255 * ENV_MIN_BRIGHTNESS);
+    // v1.27.7: photo-only IBL. Fill missing coverage with a dark neutral
+    // floor rather than the old studio-like safety light.
+    const base = 10;
     ctx.fillStyle = `rgb(${base}, ${base}, ${base})`;
     ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
-    const shiftX = ((i % 3) - 1) * side * 0.12;
-    const shiftY = (i >= 3 ? 1 : -1) * side * 0.06;
-    const sx = Math.max(0, Math.min(vw - side, sxBase + shiftX));
-    const sy = Math.max(0, Math.min(vh - side, syBase + shiftY));
-
-    // Pull live color from the current camera image, but brighten/soften it
-    // because it is being used as lighting rather than as a literal screen.
-    ctx.globalAlpha = CAMERA_ENV_BLEND;
-    ctx.filter = 'brightness(1.35) saturate(0.92) blur(1.5px)';
-
-    if (i % 2 === 1) {
-      ctx.translate(ENV_SIZE, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-    } else {
-      ctx.drawImage(source, sx, sy, side, side, 0, 0, ENV_SIZE, ENV_SIZE);
-    }
-
+    // True two-hemisphere projection. For every cube-face pixel, calculate
+    // its 3D direction, decide which hemisphere it belongs to, then sample the
+    // corresponding camera image with a fisheye-like azimuth/elevation mapping.
+    ctx.globalAlpha = 1;
     ctx.filter = 'none';
 
-    // Add a soft "window" highlight so chrome/metal always has something bright
-    // to reflect. Camera colors remain visible underneath it.
-    const grad = ctx.createLinearGradient(0, 0, ENV_SIZE, ENV_SIZE);
-    grad.addColorStop(0.0, 'rgba(255,255,255,0.42)');
-    grad.addColorStop(0.35, 'rgba(255,255,255,0.10)');
-    grad.addColorStop(1.0, 'rgba(255,255,255,0.00)');
+    const faceDirections = [
+      (u,v) => [ 1, -v, -u], // +X
+      (u,v) => [-1, -v,  u], // -X
+      (u,v) => [ u,  1,  v], // +Y
+      (u,v) => [ u, -1, -v], // -Y
+      (u,v) => [ u, -v,  1], // +Z
+      (u,v) => [-u, -v, -1]  // -Z
+    ];
+    const out = ctx.createImageData(ENV_SIZE, ENV_SIZE);
+    const rearCtx = rearScanImage?.getContext?.('2d', { willReadFrequently: true });
+    const rearData = rearCtx ? rearCtx.getImageData(0, 0, rearScanImage.width, rearScanImage.height) : null;
+    const temp = document.createElement('canvas');
+    temp.width = metrics.width;
+    temp.height = metrics.height;
+    const tempCtx = temp.getContext('2d', { willReadFrequently: true });
+    tempCtx.drawImage(source, 0, 0, metrics.width, metrics.height);
+    const liveData = tempCtx.getImageData(0, 0, metrics.width, metrics.height);
+
+    const sampleRGB = (data, sw, sh, x, y) => {
+      const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
+      const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
+      const si = (iy * sw + ix) * 4;
+      const rr = data.data[si] / 255;
+      const gg = data.data[si+1] / 255;
+      const bb = data.data[si+2] / 255;
+      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+      const highlight = THREE.MathUtils.smoothstep(lum, 0.72, 0.98);
+      const gain = 1.02 + highlight * highlight * 0.48;
+      return [Math.min(1, rr * gain), Math.min(1, gg * gain), Math.min(1, bb * gain)];
+    };
+    const writeRGB = (rgb, di) => {
+      out.data[di] = rgb[0] * 255;
+      out.data[di+1] = rgb[1] * 255;
+      out.data[di+2] = rgb[2] * 255;
+      out.data[di+3] = 255;
+    };
+    const sample = (data, sw, sh, x, y, di) => {
+      const ix = Math.max(0, Math.min(sw - 1, Math.round(x * (sw - 1))));
+      const iy = Math.max(0, Math.min(sh - 1, Math.round(y * (sh - 1))));
+      const si = (iy * sw + ix) * 4;
+      // Pseudo-HDR reconstruction from the SDR camera frame.
+      // Keep midtones fairly natural, but boost the brightest pixels much
+      // harder so windows/lamps regain some of their lost lighting energy.
+      const rr = data.data[si] / 255;
+      const gg = data.data[si+1] / 255;
+      const bb = data.data[si+2] / 255;
+      const lum = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+      const highlight = THREE.MathUtils.smoothstep(lum, 0.72, 0.98);
+      const gain = 1.02 + highlight * highlight * 0.48;
+      out.data[di] = Math.min(255, rr * gain * 255);
+      out.data[di+1] = Math.min(255, gg * gain * 255);
+      out.data[di+2] = Math.min(255, bb * gain * 255);
+      out.data[di+3] = 255;
+    };
+
+    for (let py = 0; py < ENV_SIZE; py++) {
+      const v = (py + 0.5) / ENV_SIZE * 2 - 1;
+      for (let px = 0; px < ENV_SIZE; px++) {
+        const u = (px + 0.5) / ENV_SIZE * 2 - 1;
+        let [dx,dy,dz] = faceDirections[i](u,v);
+        const inv = 1 / Math.hypot(dx,dy,dz);
+        dx*=inv; dy*=inv; dz*=inv;
+        const useRear = dz >= 0 || dualScanPhase !== 2 || !rearData;
+        const localZ = Math.abs(dz);
+        // Perspective-like hemisphere mapping: center = straight ahead,
+        // rim = 90 degrees from the camera axis.
+        const denom = Math.max(0.001, localZ + 0.34);
+        let sx = 0.5 + (dx / denom) * 0.29;
+        let sy = 0.5 - (dy / denom) * 0.29;
+        sx = THREE.MathUtils.clamp(sx, 0, 1);
+        sy = THREE.MathUtils.clamp(sy, 0, 1);
+        const di = (py * ENV_SIZE + px) * 4;
+        if (rearData && dualScanPhase === 2) {
+          // Blend both camera hemispheres around the equator instead of making
+          // a hard rear/front cut. About a 20-degree band hides exposure/color
+          // differences between the two iPhone cameras.
+          const rearRGB = sampleRGB(rearData, rearScanImage.width, rearScanImage.height, sx, sy);
+          const frontRGB = sampleRGB(liveData, metrics.width, metrics.height, 1 - sx, sy);
+          const blendHalfWidth = 0.18;
+          const rearWeight = THREE.MathUtils.smoothstep(dz, -blendHalfWidth, blendHalfWidth);
+          writeRGB([
+            THREE.MathUtils.lerp(frontRGB[0], rearRGB[0], rearWeight),
+            THREE.MathUtils.lerp(frontRGB[1], rearRGB[1], rearWeight),
+            THREE.MathUtils.lerp(frontRGB[2], rearRGB[2], rearWeight)
+          ], di);
+        } else {
+          sample(liveData, metrics.width, metrics.height, sx, sy, di);
+        }
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+    ctx.filter = 'none';
+
+    // No synthetic studio/window highlight: bright areas in the actual photo
+    // should become the highlights in the reflection.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, ENV_SIZE, ENV_SIZE);
 
     ctx.restore();
   });
 
+  // iOS Safari does not reliably refresh a CubeTexture whose canvas faces
+  // are mutated in place. Recreate the texture object, just like the working
+  // live environment update path does.
+  const previousLiveEnvMap = liveEnvMap;
+  liveEnvMap = new THREE.CubeTexture(envCanvases);
+  liveEnvMap.colorSpace = THREE.SRGBColorSpace;
   liveEnvMap.needsUpdate = true;
+
+  if (iblSourceState === 'photo' && model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        mat.envMap = liveEnvMap;
+        mat.needsUpdate = true;
+      });
+    });
+  }
+  if (previousLiveEnvMap) previousLiveEnvMap.dispose();
 }
 
 
@@ -1212,7 +1531,7 @@ async function setKaniColor(colorKey) {
 
 const loader = new FBXLoader();
 loader.load(
-  './models/CrabGuitarKA23_High.fbx',
+  '../models/CrabGuitarKA23_High.fbx',
   (fbx) => {
     model = fbx;
 
@@ -1229,6 +1548,8 @@ loader.load(
         map: colorTextures[currentColorKey],
         metalnessMap: metallicTexture,
         roughnessMap: roughnessTexture,
+        normalMap: normalTexture,
+        normalScale: new THREE.Vector2(0.65, 0.65),
         // Slightly under 1.0 on purpose: keeps a small diffuse contribution
         // so very dark metallic texels do not collapse to pure black.
         metalness: METALNESS_GAIN,
@@ -1263,6 +1584,7 @@ loader.load(
     updateVirtualFloor();
     updateShadowFromDirectControls();
 
+    applyRenderQualityMode(renderQualityMode);
     statusEl.textContent = 'カニギター準備完了';
     setTimeout(() => { hint.style.opacity = '0'; }, 3500);
   },
@@ -1311,8 +1633,10 @@ function render(now = 0) {
   if (now - lastLiveFrame < frameInterval) return;
   lastLiveFrame = now - ((now - lastLiveFrame) % frameInterval);
 
-  updateLiveEnvironment(now);
-  updateAdaptiveLighting(now);
+  if (!environmentScanFrozen) {
+    updateLiveEnvironment(now);
+    updateAdaptiveLighting(now);
+  }
 
   // Shadow systems are normally off. Avoid their per-frame transforms and
   // model bounds traversal unless the user is actually using them.
@@ -1320,6 +1644,21 @@ function render(now = 0) {
   if (floorShadowEnabledState || floorPanel.classList.contains('open')) updateVirtualFloor();
   if (fovPanel.classList.contains('open')) updatePerspectiveGuide();
 
+  if (chromeTestEnabled && model) {
+    model.traverse((child) => {
+      if (!child.isMesh || !child.material || !child.userData.chromeOriginalMaterial) return;
+      child.material.envMap = iblSourceState === 'photo' ? liveEnvMap : studioEnvironment;
+      child.material.envMapIntensity = 1.0;
+      if (child.material.envMapRotation) {
+        const useIblRotation = lightMethodState === 'ibl' || lightMethodState === 'both';
+        child.material.envMapRotation.set(
+          useIblRotation ? THREE.MathUtils.degToRad(Number(lightElevation.value)) : 0,
+          useIblRotation ? THREE.MathUtils.degToRad(Number(lightAzimuth.value)) : 0,
+          0
+        );
+      }
+    });
+  }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(render);
@@ -1783,6 +2122,129 @@ lightElevation.addEventListener('input', () => {
   if (!autoLightingEnabled) setManualLightPosition();
 });
 
+function setLightDirectionFromPointer(e) {
+  if (autoLightingEnabled || !lightDirectionPad) return;
+  const r = lightDirectionPad.getBoundingClientRect();
+  const x = THREE.MathUtils.clamp((e.clientX - r.left) / r.width, 0, 1);
+  const y = THREE.MathUtils.clamp((e.clientY - r.top) / r.height, 0, 1);
+  lightAzimuth.value = String(Math.round(-180 + x * 360));
+  lightElevation.value = String(Math.round(80 - y * 140));
+  updateLightLabels();
+  setManualLightPosition();
+}
+lightDirectionPad?.addEventListener('pointerdown', (e) => {
+  lightDirectionPad.setPointerCapture(e.pointerId);
+  setLightDirectionFromPointer(e);
+});
+lightDirectionPad?.addEventListener('pointermove', (e) => {
+  if (lightDirectionPad.hasPointerCapture(e.pointerId)) setLightDirectionFromPointer(e);
+});
+lightMethod.addEventListener('change', () => {
+  lightMethodState = lightMethod.value;
+  if (!autoLightingEnabled) setManualLighting();
+});
+chromeTestBtn?.addEventListener('click', () => {
+  chromeTestEnabled = !chromeTestEnabled;
+  chromeTestBtn.textContent = chromeTestEnabled ? 'シルバー解除' : '鏡面シルバー';
+  chromeTestBtn.classList.toggle('active', chromeTestEnabled);
+  if (!model) return;
+
+  model.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    if (chromeTestEnabled) {
+      if (!child.userData.chromeOriginalMaterial) {
+        child.userData.chromeOriginalMaterial = child.material;
+      }
+      // Deliberately use a brand-new material, independent of every original
+      // crab-guitar texture/map/clearcoat setting. This makes it a clean IBL test.
+      child.material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: 1,
+        roughness: 0,
+        envMap: iblSourceState === 'photo' ? liveEnvMap : studioEnvironment,
+        envMapIntensity: 1.0
+      });
+    } else if (child.userData.chromeOriginalMaterial) {
+      if (child.material?.dispose) child.material.dispose();
+      child.material = child.userData.chromeOriginalMaterial;
+      delete child.userData.chromeOriginalMaterial;
+    }
+  });
+
+  if (!chromeTestEnabled) applyRenderQualityMode(renderQualityMode);
+  boostLiveFps();
+});
+
+scanEnvironmentBtn.addEventListener('click', async () => {
+  // One compact environment-light cycle:
+  // ライブ → 環境光をスキャン → 前面もスキャン → スタジオ → ライブ
+  if (environmentScanFrozen) {
+    environmentScanFrozen = false;
+    dualScanPhase = 0;
+    rearScanImage = null;
+    iblSourceState = 'studio';
+    applyRenderQualityMode(renderQualityMode);
+    if (!autoLightingEnabled) setManualLighting();
+    scanEnvironmentStatus.textContent = 'スタジオ';
+    scanEnvironmentBtn.textContent = 'ライブに戻す';
+    return;
+  }
+
+  if (iblSourceState === 'studio' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'ライブに戻す') {
+    iblSourceState = 'photo';
+    lastEnvUpdate = -Infinity;
+    lastLightSample = -Infinity;
+    // Switching the state alone is not enough: existing crab-guitar materials
+    // keep the studio envMap until they are explicitly rebound to liveEnvMap.
+    applyRenderQualityMode(renderQualityMode);
+    updateLiveEnvironment(performance.now());
+    updateAdaptiveLighting(performance.now(), true);
+    if (!autoLightingEnabled) setManualLighting();
+    scanEnvironmentStatus.textContent = 'ライブ';
+    scanEnvironmentBtn.textContent = 'スキャン';
+    return;
+  }
+
+  if (iblSourceState === 'photo' && dualScanPhase === 0 && scanEnvironmentBtn.textContent === 'ライブ') {
+    scanEnvironmentStatus.textContent = 'ライブ';
+    scanEnvironmentBtn.textContent = 'スキャン';
+    return;
+  }
+
+  if (inputMode === 'camera' && dualScanPhase === 0) {
+    if (facingMode !== 'environment') {
+      facingMode = 'environment';
+      await startCamera();
+    }
+    rearScanImage = captureVideoFrameForScan();
+    if (!rearScanImage) return;
+    iblSourceState = 'photo';
+    dualScanPhase = 1;
+    scanEnvironmentStatus.textContent = 'スキャン中';
+    scanEnvironmentBtn.textContent = '前面もスキャン';
+    facingMode = 'user';
+    await startCamera();
+    return;
+  }
+
+  iblSourceState = 'photo';
+  lastEnvUpdate = -Infinity;
+  lastLightSample = -Infinity;
+  applyRenderQualityMode(renderQualityMode);
+  if (inputMode === 'camera' && dualScanPhase === 1) dualScanPhase = 2;
+  const scanNow = performance.now();
+  updateLiveEnvironment(scanNow);
+  updateAdaptiveLighting(scanNow, true);
+  environmentScanFrozen = true;
+  scanEnvironmentStatus.textContent = 'スキャン固定';
+  scanEnvironmentBtn.textContent = 'スタジオに戻す';
+
+  if (inputMode === 'camera' && dualScanPhase === 2 && facingMode !== 'environment') {
+    facingMode = 'environment';
+    await startCamera();
+  }
+});
+
 updateLightLabels();
 updateLightControlState();
 syncQuickToggleButtons();
@@ -1939,6 +2401,24 @@ function snapshotGesture() {
     angle: Math.atan2(dy, dx)
   };
 }
+
+helpBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  helpOverlay.classList.add('open');
+});
+closeHelpBtn.addEventListener('click', () => helpOverlay.classList.remove('open'));
+helpOverlay.addEventListener('click', (e) => {
+  if (e.target === helpOverlay) helpOverlay.classList.remove('open');
+});
+
+renderCompareBtn.addEventListener('click', () => {
+  morePanel.classList.remove('open');
+  closeTopPanels();
+  renderComparePanel.classList.add('open');
+});
+closeRenderCompareBtn.addEventListener('click', () => renderComparePanel.classList.remove('open'));
+renderChoices.forEach((btn) => btn.addEventListener('click', () => applyRenderQualityMode(btn.dataset.renderMode)));
 
 saveSettingsBtn.addEventListener('click', () => {
   morePanel.classList.remove('open');
