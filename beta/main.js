@@ -572,6 +572,24 @@ function updateVirtualFloor() {
     return;
   }
 
+  // In placement mode the shared parent group owns the floor transform.
+  // Never rebuild the pivot from legacy floor sliders/model bounds here.
+  if (transformMode === 'placement' && floorPivot.parent === placementGroup) {
+    virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
+    virtualFloor.material.opacity = floorShadowOpacityState;
+    virtualFloor.visible = floorShadowEnabledState;
+    floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+    floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
+    key.shadow.radius = floorShadowSoftnessState * 18;
+    key.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
+    const worldFloorPos = new THREE.Vector3();
+    floorPivot.getWorldPosition(worldFloorPos);
+    key.target.position.copy(worldFloorPos);
+    key.target.updateMatrixWorld();
+    updateFloorPivotMarker();
+    return;
+  }
+
   // Pivot follows the crab-guitar foot point. Height is applied to the pivot
   // itself. Rotation happens only on the pivot; the floor remains centered at
   // local origin. This makes the yellow + the true rotation center identical.
@@ -2398,8 +2416,8 @@ function setTransformMode(mode) {
 
   if (nextMode === 'placement' && transformMode !== 'placement') {
     ensureVirtualFloor();
-    // Restore the last frozen floor transform before reparenting. Do not let
-    // updateVirtualFloor recalculate it from the guitar when mode is revisited.
+    // Restore the exact frozen world transform before reparenting. The floor
+    // must look identical when returning from guitar mode.
     if (placementFloorFrozen) {
       floorPivot.position.copy(placementFloorPosition);
       floorPivot.quaternion.copy(placementFloorQuaternion);
