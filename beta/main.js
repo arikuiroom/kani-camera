@@ -425,7 +425,7 @@ key.shadow.camera.near = 0.1;
 key.shadow.camera.far = 20;
 key.shadow.bias = -0.0008;
 key.shadow.normalBias = 0.02;
-shadowKey.shadow.radius = 3;
+key.shadow.radius = 3;
 scene.add(key);
 scene.add(key.target);
 
