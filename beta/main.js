@@ -95,15 +95,7 @@ const lightMethod = document.getElementById('lightMethod');
 const scanEnvironmentBtn = document.getElementById('scanEnvironmentBtn');
 const scanEnvironmentStatus = document.getElementById('scanEnvironmentStatus');
 const chromeTestBtn = document.getElementById('chromeTestBtn');
-const backgroundLockBtn = document.getElementById('backgroundLockBtn');
 let chromeTestEnabled = false;
-let backgroundLockEnabled = false;
-let backgroundLockLastSample = 0;
-let backgroundLockPrev = null;
-const backgroundLockCanvas = document.createElement('canvas');
-backgroundLockCanvas.width = 96;
-backgroundLockCanvas.height = 54;
-const backgroundLockCtx = backgroundLockCanvas.getContext('2d', { willReadFrequently: true });
 const preview = document.getElementById('preview');
 const previewImg = document.getElementById('previewImg');
 const shareBtn = document.getElementById('shareBtn');
@@ -1048,63 +1040,6 @@ function updateAdaptiveLighting(now, instant = false) {
   });
 }
 
-function sampleBackgroundLockFrame() {
-  if (!backgroundLockEnabled || inputMode !== 'camera' || !video.videoWidth || !video.videoHeight) return null;
-  backgroundLockCtx.drawImage(video, 0, 0, backgroundLockCanvas.width, backgroundLockCanvas.height);
-  const rgba = backgroundLockCtx.getImageData(0, 0, backgroundLockCanvas.width, backgroundLockCanvas.height).data;
-  const gray = new Uint8Array(backgroundLockCanvas.width * backgroundLockCanvas.height);
-  for (let p = 0, j = 0; p < rgba.length; p += 4, j++) {
-    gray[j] = (rgba[p] * 3 + rgba[p + 1] * 6 + rgba[p + 2]) / 10;
-  }
-  return gray;
-}
-
-function updateBackgroundLock(now) {
-  if (!backgroundLockEnabled || !model || inputMode !== 'camera') return;
-  if (now - backgroundLockLastSample < 200) return; // 5 Hz, intentionally light.
-  backgroundLockLastSample = now;
-  const current = sampleBackgroundLockFrame();
-  if (!current) return;
-  if (!backgroundLockPrev) {
-    backgroundLockPrev = current;
-    return;
-  }
-
-  const w = backgroundLockCanvas.width, h = backgroundLockCanvas.height;
-  let bestDx = 0, bestDy = 0, bestScore = Infinity;
-  const step = 3;
-  const maxShift = 6;
-  for (let dy = -maxShift; dy <= maxShift; dy++) {
-    for (let dx = -maxShift; dx <= maxShift; dx++) {
-      let score = 0, count = 0;
-      for (let y = 8; y < h - 8; y += step) {
-        const yy = y + dy;
-        if (yy < 0 || yy >= h) continue;
-        for (let x = 8; x < w - 8; x += step) {
-          const xx = x + dx;
-          if (xx < 0 || xx >= w) continue;
-          score += Math.abs(backgroundLockPrev[y * w + x] - current[yy * w + xx]);
-          count++;
-        }
-      }
-      score /= Math.max(1, count);
-      if (score < bestScore) { bestScore = score; bestDx = dx; bestDy = dy; }
-    }
-  }
-
-  // Ignore uncertain/large jumps. This mode is only meant to absorb small
-  // handheld camera motion, not behave as full AR tracking.
-  if (bestScore < 38 && Math.abs(bestDx) < maxShift && Math.abs(bestDy) < maxShift) {
-    const viewport = getCaptureViewport();
-    const pxX = bestDx * viewport.width / w;
-    const pxY = bestDy * viewport.height / h;
-    const moveSpeed = 0.0045;
-    model.position.x += pxX * moveSpeed;
-    model.position.y -= pxY * moveSpeed;
-  }
-  backgroundLockPrev = current;
-}
-
 function getActiveBackgroundSource() {
   if (inputMode === 'photo' && photoBackground.naturalWidth > 0) return photoBackground;
   if (video.videoWidth > 0 && video.videoHeight > 0) return video;
@@ -1739,8 +1674,6 @@ function render(now = 0) {
   if (now - lastLiveFrame < frameInterval) return;
   lastLiveFrame = now - ((now - lastLiveFrame) % frameInterval);
 
-  updateBackgroundLock(now);
-
   if (!environmentScanFrozen) {
     updateLiveEnvironment(now);
     updateAdaptiveLighting(now);
@@ -2251,15 +2184,6 @@ lightMethod.addEventListener('change', () => {
   lightMethodState = lightMethod.value;
   if (!autoLightingEnabled) setManualLighting();
 });
-backgroundLockBtn?.addEventListener('click', () => {
-  backgroundLockEnabled = !backgroundLockEnabled;
-  backgroundLockPrev = null;
-  backgroundLockLastSample = 0;
-  backgroundLockBtn.textContent = backgroundLockEnabled ? '背景固定 ON' : '背景固定 OFF';
-  backgroundLockBtn.classList.toggle('active', backgroundLockEnabled);
-  boostLiveFps();
-});
-
 chromeTestBtn?.addEventListener('click', () => {
   chromeTestEnabled = !chromeTestEnabled;
   chromeTestBtn.textContent = chromeTestEnabled ? 'シルバー解除' : '鏡面シルバー';
