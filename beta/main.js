@@ -448,6 +448,10 @@ let floorRollState = 0;
 let floorScaleState = 1;
 let floorOffsetX = 0;
 let floorOffsetY = 0;
+let placementFloorFrozen = false;
+const placementFloorPosition = new THREE.Vector3();
+const placementFloorQuaternion = new THREE.Quaternion();
+let placementFloorScale = 1;
 let modelFootOffsetY = -0.55;
 let suppressFloorGuideForCapture = false;
 
@@ -543,6 +547,26 @@ function updateVirtualFloor() {
   }
 
   ensureVirtualFloor();
+
+  // After leaving placement mode, the floor becomes a fixed world-space
+  // reference. Guitar-mode edits must never make it follow the model again.
+  if (placementFloorFrozen && transformMode === 'guitar') {
+    floorPivot.position.copy(placementFloorPosition);
+    floorPivot.quaternion.copy(placementFloorQuaternion);
+    floorPivot.scale.setScalar(placementFloorScale);
+    floorPivot.updateMatrixWorld(true);
+    virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
+    virtualFloor.material.opacity = floorShadowOpacityState;
+    virtualFloor.visible = floorShadowEnabledState;
+    floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+    floorGuide.visible = false;
+    key.shadow.radius = floorShadowSoftnessState * 18;
+    key.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
+    key.target.position.copy(floorPivot.position);
+    key.target.updateMatrixWorld();
+    updateFloorPivotMarker();
+    return;
+  }
 
   // Pivot follows the crab-guitar foot point. Height is applied to the pivot
   // itself. Rotation happens only on the pivot; the floor remains centered at
@@ -2315,11 +2339,22 @@ const TWO_FINGER_TWIST_DEADZONE = THREE.MathUtils.degToRad(0.35);
 let pinchGesture = null;
 
 function setTransformMode(mode) {
-  transformMode = mode === 'placement' ? 'placement' : 'guitar';
+  const nextMode = mode === 'placement' ? 'placement' : 'guitar';
+
+  if (transformMode === 'placement' && nextMode === 'guitar' && floorPivot) {
+    // Snapshot the placed floor. From here on it is independent of the guitar.
+    placementFloorPosition.copy(floorPivot.position);
+    placementFloorQuaternion.copy(floorPivot.quaternion);
+    placementFloorScale = floorPivot.scale.x;
+    placementFloorFrozen = true;
+  } else if (nextMode === 'placement') {
+    placementFloorFrozen = false;
+    updateVirtualFloor();
+  }
+
+  transformMode = nextMode;
   placementModeBtn?.classList.toggle('active', transformMode === 'placement');
   guitarModeBtn?.classList.toggle('active', transformMode === 'guitar');
-  // In placement mode the floor grid is the visual reference, even if the
-  // projected shadow itself is disabled.
   updateVirtualFloor();
   boostLiveFps();
 }
@@ -2369,15 +2404,14 @@ canvas.addEventListener('pointermove', (e) => {
     const pitch = new THREE.Quaternion()
       .setFromAxisAngle(screenRight, dy * rotateSpeed);
     if (transformMode === 'placement') {
-      placementRotation.premultiply(yaw);
-      placementRotation.premultiply(pitch);
+      ensureVirtualFloor();
+      // Apply exactly the same world-space quaternion deltas to both objects.
+      // This preserves their relative orientation at every angle.
       model.quaternion.premultiply(yaw);
       model.quaternion.premultiply(pitch);
-      // Convert the placement rotation into the existing floor pitch/roll UI state.
-      const euler = new THREE.Euler().setFromQuaternion(placementRotation, 'XYZ');
-      floorPitchState = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(euler.x), -60, 60);
-      floorRollState = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(euler.z), -60, 60);
-      updateVirtualFloor();
+      floorPivot.quaternion.premultiply(yaw);
+      floorPivot.quaternion.premultiply(pitch);
+      floorPivot.updateMatrixWorld(true);
     } else {
       model.quaternion.premultiply(yaw);
       model.quaternion.premultiply(pitch);
@@ -2394,9 +2428,10 @@ canvas.addEventListener('pointermove', (e) => {
         model.position.x += moveDx * moveSpeed;
         model.position.y -= moveDy * moveSpeed;
         if (transformMode === 'placement') {
-          floorOffsetX += moveDx * moveSpeed;
-          floorOffsetY -= moveDy * moveSpeed;
-          updateVirtualFloor();
+          ensureVirtualFloor();
+          floorPivot.position.x += moveDx * moveSpeed;
+          floorPivot.position.y -= moveDy * moveSpeed;
+          floorPivot.updateMatrixWorld(true);
         }
       }
 
@@ -2422,8 +2457,9 @@ canvas.addEventListener('pointermove', (e) => {
         model.scale.multiplyScalar(scaleFactor);
         if (transformMode === 'placement') {
           placementScale *= scaleFactor;
-          floorScaleState *= scaleFactor;
-          updateVirtualFloor();
+          ensureVirtualFloor();
+          floorPivot.scale.multiplyScalar(scaleFactor);
+          floorPivot.updateMatrixWorld(true);
         }
         pinchGesture.lastDistance = current.distance;
       }
@@ -2440,10 +2476,9 @@ canvas.addEventListener('pointermove', (e) => {
           .setFromAxisAngle(screenAxis, -twistDelta);
         model.quaternion.premultiply(screenTwist);
         if (transformMode === 'placement') {
-          floorRollState = THREE.MathUtils.clamp(
-            floorRollState - THREE.MathUtils.radToDeg(twistDelta), -60, 60
-          );
-          updateVirtualFloor();
+          ensureVirtualFloor();
+          floorPivot.quaternion.premultiply(screenTwist);
+          floorPivot.updateMatrixWorld(true);
         }
       }
 
