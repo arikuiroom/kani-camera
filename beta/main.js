@@ -119,6 +119,8 @@ const formatPngBtn = document.getElementById('formatPngBtn');
 const previewFormatJpegBtn = document.getElementById('previewFormatJpegBtn');
 const previewFormatPngBtn = document.getElementById('previewFormatPngBtn');
 const savePsdBtn = document.getElementById('savePsdBtn');
+const placementModeBtn = document.getElementById('placementModeBtn');
+const guitarModeBtn = document.getElementById('guitarModeBtn');
 
 let inputMode = 'camera';
 let facingMode = 'environment';
@@ -126,6 +128,9 @@ let stream = null;
 let photoObjectUrl = null;
 let model = null;
 let modelVisible = true;
+let transformMode = 'guitar';
+let placementRotation = new THREE.Quaternion();
+let placementScale = 1;
 let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
@@ -2309,6 +2314,18 @@ const TWO_FINGER_PINCH_START_RATIO = 0.045; // 4.5% from the initial finger spac
 const TWO_FINGER_TWIST_DEADZONE = THREE.MathUtils.degToRad(0.35);
 let pinchGesture = null;
 
+function setTransformMode(mode) {
+  transformMode = mode === 'placement' ? 'placement' : 'guitar';
+  placementModeBtn?.classList.toggle('active', transformMode === 'placement');
+  guitarModeBtn?.classList.toggle('active', transformMode === 'guitar');
+  // In placement mode the floor grid is the visual reference, even if the
+  // projected shadow itself is disabled.
+  if (floorGuide) floorGuide.visible = transformMode === 'placement';
+  boostLiveFps();
+}
+placementModeBtn?.addEventListener('click', () => setTransformMode('placement'));
+guitarModeBtn?.addEventListener('click', () => setTransformMode('guitar'));
+
 canvas.addEventListener('pointerdown', (e) => {
   boostLiveFps();
   if (floorPointPlacementMode) {
@@ -2351,8 +2368,20 @@ canvas.addEventListener('pointermove', (e) => {
       .setFromAxisAngle(screenUp, dx * rotateSpeed);
     const pitch = new THREE.Quaternion()
       .setFromAxisAngle(screenRight, dy * rotateSpeed);
-    model.quaternion.premultiply(yaw);
-    model.quaternion.premultiply(pitch);
+    if (transformMode === 'placement') {
+      placementRotation.premultiply(yaw);
+      placementRotation.premultiply(pitch);
+      model.quaternion.premultiply(yaw);
+      model.quaternion.premultiply(pitch);
+      // Convert the placement rotation into the existing floor pitch/roll UI state.
+      const euler = new THREE.Euler().setFromQuaternion(placementRotation, 'XYZ');
+      floorPitchState = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(euler.x), -60, 60);
+      floorRollState = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(euler.z), -60, 60);
+      updateVirtualFloor();
+    } else {
+      model.quaternion.premultiply(yaw);
+      model.quaternion.premultiply(pitch);
+    }
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
     if (gestureStart && current) {
@@ -2364,6 +2393,11 @@ canvas.addEventListener('pointermove', (e) => {
         const moveSpeed = 0.0045;
         model.position.x += moveDx * moveSpeed;
         model.position.y -= moveDy * moveSpeed;
+        if (transformMode === 'placement') {
+          floorOffsetX += moveDx * moveSpeed;
+          floorOffsetY -= moveDy * moveSpeed;
+          updateVirtualFloor();
+        }
       }
 
       // Scale only after the finger spacing has changed clearly enough from
@@ -2386,6 +2420,11 @@ canvas.addEventListener('pointermove', (e) => {
       } else {
         const scaleFactor = current.distance / Math.max(1, pinchGesture.lastDistance);
         model.scale.multiplyScalar(scaleFactor);
+        if (transformMode === 'placement') {
+          placementScale *= scaleFactor;
+          floorScaleState *= scaleFactor;
+          updateVirtualFloor();
+        }
         pinchGesture.lastDistance = current.distance;
       }
 
@@ -2400,6 +2439,12 @@ canvas.addEventListener('pointermove', (e) => {
         const screenTwist = new THREE.Quaternion()
           .setFromAxisAngle(screenAxis, -twistDelta);
         model.quaternion.premultiply(screenTwist);
+        if (transformMode === 'placement') {
+          floorRollState = THREE.MathUtils.clamp(
+            floorRollState - THREE.MathUtils.radToDeg(twistDelta), -60, 60
+          );
+          updateVirtualFloor();
+        }
       }
 
       gestureStart = current;
