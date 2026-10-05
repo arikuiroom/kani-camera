@@ -414,7 +414,7 @@ scene.add(hemi);
 
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
 key.position.set(2, 3, 4);
-key.castShadow = true;
+key.castShadow = false;
 const SHADOW_MAP_SIZE = 1024;
 key.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 key.shadow.camera.left = -4;
@@ -425,9 +425,29 @@ key.shadow.camera.near = 0.1;
 key.shadow.camera.far = 20;
 key.shadow.bias = -0.0008;
 key.shadow.normalBias = 0.02;
-key.shadow.radius = 3;
+shadowKey.shadow.radius = 3;
 scene.add(key);
 scene.add(key.target);
+
+// Independent directional light used only to generate the projected floor shadow.
+// Its direction is controlled in floor-local space, independently from visual lighting.
+const shadowKey = new THREE.DirectionalLight(0xffffff, 0);
+shadowKey.position.set(2, 4, 3);
+shadowKey.castShadow = true;
+shadowKey.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+shadowKey.shadow.camera.left = -4;
+shadowKey.shadow.camera.right = 4;
+shadowKey.shadow.camera.top = 4;
+shadowKey.shadow.camera.bottom = -4;
+shadowKey.shadow.camera.near = 0.1;
+shadowKey.shadow.camera.far = 20;
+shadowKey.shadow.bias = -0.0008;
+shadowKey.shadow.normalBias = 0.02;
+shadowKey.shadow.radius = 3;
+// A zero-intensity light does not participate in lighting but still owns the
+// shadow camera; the shadow receiver uses that shadow map.
+scene.add(shadowKey);
+scene.add(shadowKey.target);
 
 // ---- Virtual floor + projected shadow ------------------------------------
 let floorPivot = null;
@@ -564,10 +584,10 @@ function updateVirtualFloor() {
     virtualFloor.visible = floorShadowEnabledState;
     floorGuide.rotation.set(-Math.PI / 2, 0, 0);
     floorGuide.visible = floorGuideEnabledState && showFloorGuideDuringGuitarGesture && !suppressFloorGuideForCapture;
-    key.shadow.radius = floorShadowSoftnessState * 18;
-    key.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
-    key.target.position.copy(floorPivot.position);
-    key.target.updateMatrixWorld();
+    shadowKey.shadow.radius = floorShadowSoftnessState * 18;
+    shadowKey.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
+    shadowKey.target.position.copy(floorPivot.position);
+    shadowKey.target.updateMatrixWorld();
     updateFloorPivotMarker();
     return;
   }
@@ -580,12 +600,12 @@ function updateVirtualFloor() {
     virtualFloor.visible = floorShadowEnabledState;
     floorGuide.rotation.set(-Math.PI / 2, 0, 0);
     floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
-    key.shadow.radius = floorShadowSoftnessState * 18;
-    key.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
+    shadowKey.shadow.radius = floorShadowSoftnessState * 18;
+    shadowKey.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
     const worldFloorPos = new THREE.Vector3();
     floorPivot.getWorldPosition(worldFloorPos);
-    key.target.position.copy(worldFloorPos);
-    key.target.updateMatrixWorld();
+    shadowKey.target.position.copy(worldFloorPos);
+    shadowKey.target.updateMatrixWorld();
     updateFloorPivotMarker();
     return;
   }
@@ -628,12 +648,12 @@ function updateVirtualFloor() {
   floorGuide.visible = floorGuideEnabledState && (floorPanel.classList.contains('open') || transformMode === 'placement' || showFloorGuideDuringGuitarGesture) && !suppressFloorGuideForCapture;
   floorGuide.updateMatrixWorld(true);
 
-  key.shadow.radius = floorShadowSoftnessState * 18;
-  key.shadow.blurSamples = floorShadowSoftnessState <= 0.001
+  shadowKey.shadow.radius = floorShadowSoftnessState * 18;
+  shadowKey.shadow.blurSamples = floorShadowSoftnessState <= 0.001
     ? 1
     : Math.round(2 + floorShadowSoftnessState * 22);
-  key.target.position.copy(floorPivot.position);
-  key.target.updateMatrixWorld();
+  shadowKey.target.position.copy(floorPivot.position);
+  shadowKey.target.updateMatrixWorld();
 
   updateFloorPivotMarker();
 }
@@ -685,22 +705,44 @@ shadowDirectionPad?.addEventListener('pointercancel', (e) => {
 });
 
 function updateShadowFromDirectControls() {
-  if (!manualShadowShapeEnabled || !model) return;
+  if (!manualShadowShapeEnabled || !model || !floorPivot) return;
 
-  // Keep the receiver plane stable. The user edits the visible result instead:
-  // direction = light azimuth opposite the desired shadow,
-  // length = light elevation (lower light => longer projected shadow).
-  const dir = THREE.MathUtils.degToRad(shadowDirectionState + 180);
-  const elevationDeg = THREE.MathUtils.lerp(72, 12, THREE.MathUtils.clamp((shadowLengthState - 0.15) / 1.65, 0, 1));
+  // Interpret the pad angle in the floor's own plane, not around world Y.
+  // This gives a uniform 360-degree shadow direction regardless of floor tilt.
+  floorPivot.updateMatrixWorld(true);
+  const floorWorldQuat = new THREE.Quaternion();
+  const floorWorldPos = new THREE.Vector3();
+  floorPivot.getWorldQuaternion(floorWorldQuat);
+  floorPivot.getWorldPosition(floorWorldPos);
+
+  // virtualFloor is locally rotated -90deg around X, so its local X/Z axes
+  // become the two in-plane world directions and local Y becomes its normal.
+  const floorRight = new THREE.Vector3(1, 0, 0).applyQuaternion(floorWorldQuat).normalize();
+  const floorForward = new THREE.Vector3(0, 0, 1).applyQuaternion(floorWorldQuat).normalize();
+  const floorNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(floorWorldQuat).normalize();
+
+  const angle = THREE.MathUtils.degToRad(shadowDirectionState);
+  const shadowDir = floorRight.clone().multiplyScalar(Math.sin(angle))
+    .addScaledVector(floorForward, -Math.cos(angle))
+    .normalize();
+
+  const elevationDeg = THREE.MathUtils.lerp(
+    72, 12,
+    THREE.MathUtils.clamp((shadowLengthState - 0.15) / 1.65, 0, 1)
+  );
   const el = THREE.MathUtils.degToRad(elevationDeg);
   const radius = 5;
-  const cosEl = Math.cos(el);
-  const target = key.target.position;
-  key.position.set(
-    target.x + Math.sin(dir) * cosEl * radius,
-    target.y + Math.sin(el) * radius,
-    target.z + Math.cos(dir) * cosEl * radius
-  );
+
+  // Light sits opposite the requested shadow direction, lifted along the
+  // actual floor normal. DirectionalLight rays then cast the shadow along pad direction.
+  const lightDir = shadowDir.clone().multiplyScalar(-Math.cos(el))
+    .addScaledVector(floorNormal, Math.sin(el))
+    .normalize();
+
+  shadowKey.target.position.copy(floorWorldPos);
+  shadowKey.position.copy(floorWorldPos).addScaledVector(lightDir, radius);
+  shadowKey.target.updateMatrixWorld();
+  shadowKey.updateMatrixWorld();
 }
 
 function setFloorPointMarker(clientX, clientY) {
