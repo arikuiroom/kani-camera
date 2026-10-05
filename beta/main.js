@@ -131,6 +131,7 @@ let modelVisible = true;
 let transformMode = 'guitar';
 let placementRotation = new THREE.Quaternion();
 let placementScale = 1;
+let placementGroup = null;
 let initialModelScale = 1;
 let lastCaptureBlob = null;
 let lastCaptureUrl = null;
@@ -2338,18 +2339,41 @@ const TWO_FINGER_PINCH_START_RATIO = 0.045; // 4.5% from the initial finger spac
 const TWO_FINGER_TWIST_DEADZONE = THREE.MathUtils.degToRad(0.35);
 let pinchGesture = null;
 
+function ensurePlacementGroup() {
+  if (!placementGroup) {
+    placementGroup = new THREE.Group();
+    placementGroup.name = 'PlacementGroup';
+    scene.add(placementGroup);
+  }
+  return placementGroup;
+}
+
 function setTransformMode(mode) {
   const nextMode = mode === 'placement' ? 'placement' : 'guitar';
 
-  if (transformMode === 'placement' && nextMode === 'guitar' && floorPivot) {
-    // Snapshot the placed floor. From here on it is independent of the guitar.
+  if (nextMode === 'placement' && transformMode !== 'placement') {
+    ensureVirtualFloor();
+    const group = ensurePlacementGroup();
+    // Preserve both world transforms while reparenting them under one pivot.
+    group.position.set(0, 0, 0);
+    group.quaternion.identity();
+    group.scale.set(1, 1, 1);
+    group.attach(model);
+    group.attach(floorPivot);
+    placementFloorFrozen = false;
+  } else if (transformMode === 'placement' && nextMode === 'guitar') {
+    const group = ensurePlacementGroup();
+    // Bake the shared placement transform back into each child, then separate
+    // them. From this point guitar gestures affect only the guitar.
+    scene.attach(model);
+    scene.attach(floorPivot);
     placementFloorPosition.copy(floorPivot.position);
     placementFloorQuaternion.copy(floorPivot.quaternion);
     placementFloorScale = floorPivot.scale.x;
     placementFloorFrozen = true;
-  } else if (nextMode === 'placement') {
-    placementFloorFrozen = false;
-    updateVirtualFloor();
+    group.position.set(0, 0, 0);
+    group.quaternion.identity();
+    group.scale.set(1, 1, 1);
   }
 
   transformMode = nextMode;
@@ -2403,19 +2427,9 @@ canvas.addEventListener('pointermove', (e) => {
       .setFromAxisAngle(screenUp, dx * rotateSpeed);
     const pitch = new THREE.Quaternion()
       .setFromAxisAngle(screenRight, dy * rotateSpeed);
-    if (transformMode === 'placement') {
-      ensureVirtualFloor();
-      // Apply exactly the same world-space quaternion deltas to both objects.
-      // This preserves their relative orientation at every angle.
-      model.quaternion.premultiply(yaw);
-      model.quaternion.premultiply(pitch);
-      floorPivot.quaternion.premultiply(yaw);
-      floorPivot.quaternion.premultiply(pitch);
-      floorPivot.updateMatrixWorld(true);
-    } else {
-      model.quaternion.premultiply(yaw);
-      model.quaternion.premultiply(pitch);
-    }
+    const rotationTarget = transformMode === 'placement' ? ensurePlacementGroup() : model;
+    rotationTarget.quaternion.premultiply(yaw);
+    rotationTarget.quaternion.premultiply(pitch);
   } else if (touches.size >= 2) {
     const current = snapshotGesture();
     if (gestureStart && current) {
@@ -2425,14 +2439,9 @@ canvas.addEventListener('pointermove', (e) => {
       const moveDy = current.centerY - gestureStart.centerY;
       if (Math.hypot(moveDx, moveDy) >= TWO_FINGER_MOVE_DEADZONE) {
         const moveSpeed = 0.0045;
-        model.position.x += moveDx * moveSpeed;
-        model.position.y -= moveDy * moveSpeed;
-        if (transformMode === 'placement') {
-          ensureVirtualFloor();
-          floorPivot.position.x += moveDx * moveSpeed;
-          floorPivot.position.y -= moveDy * moveSpeed;
-          floorPivot.updateMatrixWorld(true);
-        }
+        const moveTarget = transformMode === 'placement' ? ensurePlacementGroup() : model;
+        moveTarget.position.x += moveDx * moveSpeed;
+        moveTarget.position.y -= moveDy * moveSpeed;
       }
 
       // Scale only after the finger spacing has changed clearly enough from
@@ -2454,13 +2463,8 @@ canvas.addEventListener('pointermove', (e) => {
         }
       } else {
         const scaleFactor = current.distance / Math.max(1, pinchGesture.lastDistance);
-        model.scale.multiplyScalar(scaleFactor);
-        if (transformMode === 'placement') {
-          placementScale *= scaleFactor;
-          ensureVirtualFloor();
-          floorPivot.scale.multiplyScalar(scaleFactor);
-          floorPivot.updateMatrixWorld(true);
-        }
+        const scaleTarget = transformMode === 'placement' ? ensurePlacementGroup() : model;
+        scaleTarget.scale.multiplyScalar(scaleFactor);
         pinchGesture.lastDistance = current.distance;
       }
 
@@ -2474,12 +2478,8 @@ canvas.addEventListener('pointermove', (e) => {
           .normalize();
         const screenTwist = new THREE.Quaternion()
           .setFromAxisAngle(screenAxis, -twistDelta);
-        model.quaternion.premultiply(screenTwist);
-        if (transformMode === 'placement') {
-          ensureVirtualFloor();
-          floorPivot.quaternion.premultiply(screenTwist);
-          floorPivot.updateMatrixWorld(true);
-        }
+        const twistTarget = transformMode === 'placement' ? ensurePlacementGroup() : model;
+        twistTarget.quaternion.premultiply(screenTwist);
       }
 
       gestureStart = current;
