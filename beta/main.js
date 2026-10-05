@@ -673,7 +673,8 @@ function updateFloorLabels() {
 function updateShadowDirectionPad() {
   if (!shadowDirectionPad || !shadowDirectionKnob) return;
   const rad = THREE.MathUtils.degToRad(shadowDirectionState);
-  const radius = 36;
+  const lengthNorm = THREE.MathUtils.clamp((shadowLengthState - 0.15) / 1.65, 0, 1);
+  const radius = lengthNorm * 42;
   shadowDirectionKnob.style.left = `calc(50% + ${Math.sin(rad) * radius}%)`;
   shadowDirectionKnob.style.top = `calc(50% - ${Math.cos(rad) * radius}%)`;
 }
@@ -682,8 +683,12 @@ function setShadowDirectionFromPointer(e) {
   const r = shadowDirectionPad.getBoundingClientRect();
   const x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
   const y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
-  shadowDirectionState = THREE.MathUtils.radToDeg(Math.atan2(x, -y));
+  const distance = THREE.MathUtils.clamp(Math.hypot(x, y), 0, 1);
+  if (distance > 0.035) shadowDirectionState = THREE.MathUtils.radToDeg(Math.atan2(x, -y));
+  // Center = short/high light, edge = long/low light.
+  shadowLengthState = THREE.MathUtils.lerp(0.15, 1.80, distance);
   shadowDirection.value = String(Math.round(shadowDirectionState));
+  shadowLength.value = shadowLengthState.toFixed(2);
   manualShadowShapeEnabled = true;
   updateFloorLabels();
   updateShadowDirectionPad();
@@ -1951,6 +1956,27 @@ resetBtn.addEventListener('click', () => {
   floorPitchState = 0;
   floorRollState = 0;
   floorScaleState = 1;
+  placementFloorFrozen = false;
+  placementFloorPosition.set(0, 0, 0);
+  placementFloorQuaternion.identity();
+  placementFloorScale = 1;
+  placementRotation.identity();
+  placementScale = 1;
+  showFloorGuideDuringGuitarGesture = false;
+  if (placementGroup) {
+    scene.attach(model);
+    if (floorPivot) scene.attach(floorPivot);
+    placementGroup.position.set(0, 0, 0);
+    placementGroup.quaternion.identity();
+    placementGroup.scale.set(1, 1, 1);
+  }
+  if (floorPivot) {
+    floorPivot.position.set(0, -0.55, 0);
+    floorPivot.quaternion.identity();
+    floorPivot.scale.set(1, 1, 1);
+  }
+  transformMode = 'guitar';
+  setTransformMode('placement');
   floorShadowEnabled.checked = false;
   floorY.value = '-0.55';
   floorTilt.value = '0';
