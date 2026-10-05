@@ -48,6 +48,8 @@ const shadowOpacityOut = document.getElementById('shadowOpacityOut');
 const shadowBlurOut = document.getElementById('shadowBlurOut');
 const shadowSizeOut = document.getElementById('shadowSizeOut');
 const shadowOffsetOut = document.getElementById('shadowOffsetOut');
+const shadowDirectionPad = document.getElementById('shadowDirectionPad');
+const shadowDirectionKnob = document.getElementById('shadowDirectionKnob');
 const floorBtn = document.getElementById('floorBtn');
 const floorPanel = document.getElementById('floorPanel');
 const closeFloorBtn = document.getElementById('closeFloorBtn');
@@ -128,7 +130,7 @@ let stream = null;
 let photoObjectUrl = null;
 let model = null;
 let modelVisible = true;
-let transformMode = 'guitar';
+let transformMode = 'placement';
 let placementRotation = new THREE.Quaternion();
 let placementScale = 1;
 let placementGroup = null;
@@ -626,7 +628,42 @@ function updateFloorLabels() {
   shadowLengthOut.textContent = shadowLengthState.toFixed(2);
   floorHeightOut.textContent = floorHeightState.toFixed(2);
   floorPitchOut.textContent = `${Math.round(floorPitchState)}°`;
+  updateShadowDirectionPad();
 }
+
+function updateShadowDirectionPad() {
+  if (!shadowDirectionPad || !shadowDirectionKnob) return;
+  const rad = THREE.MathUtils.degToRad(shadowDirectionState);
+  const radius = 36;
+  shadowDirectionKnob.style.left = `calc(50% + ${Math.sin(rad) * radius}%)`;
+  shadowDirectionKnob.style.top = `calc(50% - ${Math.cos(rad) * radius}%)`;
+}
+function setShadowDirectionFromPointer(e) {
+  if (!shadowDirectionPad) return;
+  const r = shadowDirectionPad.getBoundingClientRect();
+  const x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+  const y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+  shadowDirectionState = THREE.MathUtils.radToDeg(Math.atan2(x, -y));
+  shadowDirection.value = String(Math.round(shadowDirectionState));
+  manualShadowShapeEnabled = true;
+  updateFloorLabels();
+  updateShadowDirectionPad();
+  updateShadowFromDirectControls();
+  boostLiveFps();
+}
+shadowDirectionPad?.addEventListener('pointerdown', (e) => {
+  shadowDirectionPad.setPointerCapture(e.pointerId);
+  setShadowDirectionFromPointer(e);
+});
+shadowDirectionPad?.addEventListener('pointermove', (e) => {
+  if (shadowDirectionPad.hasPointerCapture(e.pointerId)) setShadowDirectionFromPointer(e);
+});
+shadowDirectionPad?.addEventListener('pointerup', (e) => {
+  if (shadowDirectionPad.hasPointerCapture(e.pointerId)) shadowDirectionPad.releasePointerCapture(e.pointerId);
+});
+shadowDirectionPad?.addEventListener('pointercancel', (e) => {
+  if (shadowDirectionPad.hasPointerCapture(e.pointerId)) shadowDirectionPad.releasePointerCapture(e.pointerId);
+});
 
 function updateShadowFromDirectControls() {
   if (!manualShadowShapeEnabled || !model) return;
@@ -1612,6 +1649,8 @@ loader.load(
       // This deliberately keeps self-shadowing postponed.
       child.castShadow = true;
       child.receiveShadow = false;
+      // Shadows are background elements; the guitar must always render above them.
+      child.renderOrder = 100;
 
       // Use one predictable PBR material so FBX material colors do not tint
       // the Albedo red. The supplied maps control color, metalness and roughness.
@@ -1627,7 +1666,9 @@ loader.load(
         roughness: 1.0,
         envMap: liveEnvMap,
         envMapIntensity: ENV_REFLECTION_INTENSITY,
-        color: blendTint
+        color: blendTint,
+        depthTest: true,
+        depthWrite: true
       });
 
       child.material = pbrMaterial;
@@ -1650,6 +1691,12 @@ loader.load(
     model.rotation.set(0.05, -0.2, -0.12);
     model.position.set(0, 0, 0);
     scene.add(model);
+    ensureVirtualFloor();
+    // Startup defaults to placement mode so the user first aligns the scene.
+    const initialPlacementGroup = ensurePlacementGroup();
+    initialPlacementGroup.attach(model);
+    initialPlacementGroup.attach(floorPivot);
+    setTransformMode('placement');
     ensurePerspectiveGuide();
     updateGroundShadow();
     updateVirtualFloor();
@@ -2353,8 +2400,15 @@ function setTransformMode(mode) {
 
   if (nextMode === 'placement' && transformMode !== 'placement') {
     ensureVirtualFloor();
+    // Restore the last frozen floor transform before reparenting. Do not let
+    // updateVirtualFloor recalculate it from the guitar when mode is revisited.
+    if (placementFloorFrozen) {
+      floorPivot.position.copy(placementFloorPosition);
+      floorPivot.quaternion.copy(placementFloorQuaternion);
+      floorPivot.scale.setScalar(placementFloorScale);
+      floorPivot.updateMatrixWorld(true);
+    }
     const group = ensurePlacementGroup();
-    // Preserve both world transforms while reparenting them under one pivot.
     group.position.set(0, 0, 0);
     group.quaternion.identity();
     group.scale.set(1, 1, 1);
