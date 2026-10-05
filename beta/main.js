@@ -457,6 +457,7 @@ const placementFloorQuaternion = new THREE.Quaternion();
 let placementFloorScale = 1;
 let modelFootOffsetY = -0.55;
 let suppressFloorGuideForCapture = false;
+let showFloorGuideDuringGuitarGesture = false;
 
 function syncProjectedShadowRendering() {
   // The expensive shadow-map pass is only useful when the projected floor
@@ -562,7 +563,7 @@ function updateVirtualFloor() {
     virtualFloor.material.opacity = floorShadowOpacityState;
     virtualFloor.visible = floorShadowEnabledState;
     floorGuide.rotation.set(-Math.PI / 2, 0, 0);
-    floorGuide.visible = false;
+    floorGuide.visible = floorGuideEnabledState && showFloorGuideDuringGuitarGesture && !suppressFloorGuideForCapture;
     key.shadow.radius = floorShadowSoftnessState * 18;
     key.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
     key.target.position.copy(floorPivot.position);
@@ -606,7 +607,7 @@ function updateVirtualFloor() {
   virtualFloor.updateMatrixWorld(true);
 
   floorGuide.rotation.set(-Math.PI / 2, 0, 0);
-  floorGuide.visible = floorGuideEnabledState && (floorPanel.classList.contains('open') || transformMode === 'placement') && !suppressFloorGuideForCapture;
+  floorGuide.visible = floorGuideEnabledState && (floorPanel.classList.contains('open') || transformMode === 'placement' || showFloorGuideDuringGuitarGesture) && !suppressFloorGuideForCapture;
   floorGuide.updateMatrixWorld(true);
 
   key.shadow.radius = floorShadowSoftnessState * 18;
@@ -2056,10 +2057,7 @@ floorPitch.addEventListener('input', () => {
   updateVirtualFloor();
 });
 
-toggleFloorDetailsBtn.addEventListener('click', () => {
-  floorDetails.classList.toggle('open');
-  toggleFloorDetailsBtn.textContent = floorDetails.classList.contains('open') ? '閉じる' : '開く';
-});
+
 
 closeFloorBtn.addEventListener('click', () => {
   floorPanel.classList.remove('open');
@@ -2441,6 +2439,10 @@ guitarModeBtn?.addEventListener('click', () => setTransformMode('guitar'));
 
 canvas.addEventListener('pointerdown', (e) => {
   boostLiveFps();
+  if (transformMode === 'guitar') {
+    showFloorGuideDuringGuitarGesture = true;
+    updateVirtualFloor();
+  }
   if (floorPointPlacementMode) {
     e.preventDefault();
     placeFloorAtScreenPoint(e.clientX, e.clientY);
@@ -2559,6 +2561,10 @@ function endPointer(e) {
     boostLiveFps();
   } else {
     interactionBoostUntil = 0;
+    if (transformMode === 'guitar') {
+      showFloorGuideDuringGuitarGesture = false;
+      updateVirtualFloor();
+    }
   }
 }
 canvas.addEventListener('pointerup', endPointer);
