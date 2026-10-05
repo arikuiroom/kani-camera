@@ -498,7 +498,7 @@ function ensureVirtualFloor() {
 }
 
 function updateFloorPivotMarker() {
-  if (!floorPivot || !floorPanel.classList.contains('open') || !floorGuideEnabledState || suppressFloorGuideForCapture) {
+  if (!floorPivot || (!floorPanel.classList.contains('open') && transformMode !== 'placement') || !floorGuideEnabledState || suppressFloorGuideForCapture) {
     floorPivotMarker.classList.remove('visible');
     return;
   }
@@ -534,7 +534,7 @@ function getCrabGuitarWorldBox() {
 }
 
 function updateVirtualFloor() {
-  const floorUIActive = floorPanel.classList.contains('open');
+  const floorUIActive = floorPanel.classList.contains('open') || transformMode === 'placement';
   if (!floorShadowEnabledState && !floorUIActive) {
     if (virtualFloor) virtualFloor.visible = false;
     if (floorGuide) floorGuide.visible = false;
@@ -579,7 +579,7 @@ function updateVirtualFloor() {
   virtualFloor.updateMatrixWorld(true);
 
   floorGuide.rotation.set(-Math.PI / 2, 0, 0);
-  floorGuide.visible = floorGuideEnabledState && floorPanel.classList.contains('open') && !suppressFloorGuideForCapture;
+  floorGuide.visible = floorGuideEnabledState && (floorPanel.classList.contains('open') || transformMode === 'placement') && !suppressFloorGuideForCapture;
   floorGuide.updateMatrixWorld(true);
 
   key.shadow.radius = floorShadowSoftnessState * 18;
@@ -2320,7 +2320,7 @@ function setTransformMode(mode) {
   guitarModeBtn?.classList.toggle('active', transformMode === 'guitar');
   // In placement mode the floor grid is the visual reference, even if the
   // projected shadow itself is disabled.
-  if (floorGuide) floorGuide.visible = transformMode === 'placement';
+  updateVirtualFloor();
   boostLiveFps();
 }
 placementModeBtn?.addEventListener('click', () => setTransformMode('placement'));
