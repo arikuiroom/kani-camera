@@ -959,7 +959,7 @@
       <button id="renderCompareBtn" style="display:none">画質比較</button>
       <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.37.10 beta</div>
+      <div class="menu-version">Kani Camera v1.37.11 beta</div>
     </div>
     
     <div id="renderComparePanel" aria-label="画質比較">
@@ -1221,6 +1221,9 @@
         <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
         <button id="previewFormatPngBtn" class="format-choice">PNG</button>
         <button id="savePsdBtn">PSD（レイヤー付き）</button>
+        <button id="saveSceneJsonBtn" type="button">配置設定をJSON保存</button>
+        <button id="loadSceneJsonBtn" type="button">配置設定を読み込む</button>
+        <input id="sceneJsonPicker" type="file" accept=".json,application/json" hidden />
       </div>
     </div>
   </div>
@@ -1228,7 +1231,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.37.10 beta</div>
+      <div class="start-version">Kani Camera v1.37.11 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
