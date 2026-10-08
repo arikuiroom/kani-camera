@@ -510,17 +510,12 @@ function ensureVirtualFloor() {
   virtualFloor.position.set(0, 0, 0);
   floorPivot.add(virtualFloor);
 
-  const guideGeometry = new THREE.PlaneGeometry(6, 6, 6, 6);
-  const guideMaterial = new THREE.MeshBasicMaterial({
-    color: 0x66ccff,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.20,
-    depthWrite: false
-  });
-  floorGuide = new THREE.Mesh(guideGeometry, guideMaterial);
+  // GridHelper draws only orthogonal grid lines, never triangle diagonals.
+  floorGuide = new THREE.GridHelper(6, 6, 0x66ccff, 0x66ccff);
+  floorGuide.material.transparent = true;
+  floorGuide.material.opacity = 0.20;
+  floorGuide.material.depthWrite = false;
   floorGuide.renderOrder = -60;
-  floorGuide.position.set(0, 0, 0);
   floorPivot.add(floorGuide);
   updateVirtualFloor();
 }
@@ -582,7 +577,7 @@ function updateVirtualFloor() {
     virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
     virtualFloor.material.opacity = floorShadowOpacityState;
     virtualFloor.visible = floorShadowEnabledState;
-    floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+    floorGuide.rotation.set(0, 0, 0);
     floorGuide.visible = floorGuideEnabledState && showFloorGuideDuringGuitarGesture && !suppressFloorGuideForCapture;
     shadowKey.shadow.radius = floorShadowSoftnessState * 18;
     shadowKey.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
@@ -598,7 +593,7 @@ function updateVirtualFloor() {
     virtualFloor.rotation.set(-Math.PI / 2, 0, 0);
     virtualFloor.material.opacity = floorShadowOpacityState;
     virtualFloor.visible = floorShadowEnabledState;
-    floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+    floorGuide.rotation.set(0, 0, 0);
     floorGuide.visible = floorGuideEnabledState && !suppressFloorGuideForCapture;
     shadowKey.shadow.radius = floorShadowSoftnessState * 18;
     shadowKey.shadow.blurSamples = floorShadowSoftnessState <= 0.001 ? 1 : Math.round(2 + floorShadowSoftnessState * 22);
@@ -644,7 +639,7 @@ function updateVirtualFloor() {
   virtualFloor.visible = floorShadowEnabledState;
   virtualFloor.updateMatrixWorld(true);
 
-  floorGuide.rotation.set(-Math.PI / 2, 0, 0);
+  floorGuide.rotation.set(0, 0, 0);
   floorGuide.visible = floorGuideEnabledState && (floorPanel.classList.contains('open') || transformMode === 'placement' || showFloorGuideDuringGuitarGesture) && !suppressFloorGuideForCapture;
   floorGuide.updateMatrixWorld(true);
 
