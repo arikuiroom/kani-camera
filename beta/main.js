@@ -2805,6 +2805,109 @@ async function saveLayeredPsd() {
 }
 savePsdBtn.addEventListener('click', saveLayeredPsd);
 
+const saveSceneJsonBtn = document.getElementById('saveSceneJsonBtn');
+const loadSceneJsonBtn = document.getElementById('loadSceneJsonBtn');
+const sceneJsonPicker = document.getElementById('sceneJsonPicker');
+function serializeTransform(obj) {
+  return {position: obj.position.toArray(), quaternion: obj.quaternion.toArray(), scale: obj.scale.toArray()};
+}
+function restoreTransform(obj, data) {
+  if (!obj || !data || !Array.isArray(data.position) || !Array.isArray(data.quaternion) || !Array.isArray(data.scale)) throw Error('Invalid transform');
+  const nums = [...data.position, ...data.quaternion, ...data.scale];
+  if (!nums.every(Number.isFinite) || data.position.length !== 3 || data.quaternion.length !== 4 || data.scale.length !== 3) throw Error('Invalid transform values');
+  obj.position.fromArray(data.position);
+  obj.quaternion.fromArray(data.quaternion).normalize();
+  obj.scale.fromArray(data.scale);
+  obj.updateMatrixWorld(true);
+}
+function exportSceneState() {
+  if (!model || !floorPivot) throw Error('Model not ready');
+  model.updateWorldMatrix(true, false);
+  floorPivot.updateWorldMatrix(true, false);
+  const modelWorld = model.matrixWorld.clone();
+  const floorWorld = floorPivot.matrixWorld.clone();
+  const extract = (matrix) => {
+    const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    matrix.decompose(p, q, s);
+    return {position:p.toArray(), quaternion:q.toArray(), scale:s.toArray()};
+  };
+  return {
+    format:'kani-camera-scene', version:1, createdAt:new Date().toISOString(),
+    color:currentColorKey,
+    guitar:extract(modelWorld), floor:extract(floorWorld),
+    fov:camera.fov,
+    lighting:{power:Number(lightPower.value), azimuth:Number(lightAzimuth.value), elevation:Number(lightElevation.value), auto:autoLight.checked, method:lightMethod.value, environment:iblSourceState},
+    shadow:{floorEnabled:floorShadowEnabledState, opacity:floorShadowOpacityState, softness:floorShadowSoftnessState, direction:shadowDirectionState, length:shadowLengthState, manual:manualShadowShapeEnabled,
+      roundEnabled:shadowEnabledState, roundOpacity:shadowOpacityState, roundBlur:shadowBlurState, roundSize:shadowSizeState, roundOffset:shadowOffsetState},
+    blend:{enabled:blendEnabledState,strength:blendStrengthState}
+  };
+}
+saveSceneJsonBtn?.addEventListener('click', async () => {
+  try {
+    const data = JSON.stringify(exportSceneState(), null, 2);
+    const stamp = new Date().toISOString().replace(/[-:T]/g,'').slice(0,12);
+    const file = new File([data], 'Crabguitar'+stamp+'.json', {type:'application/json'});
+    if (navigator.share && navigator.canShare?.({files:[file]})) await navigator.share({files:[file]});
+    else {
+      const url=URL.createObjectURL(file), a=document.createElement('a');
+      a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }
+  } catch(e) {if(e?.name!=='AbortError'){console.error(e);alert('設定を保存できませんでした');}}
+});
+loadSceneJsonBtn?.addEventListener('click',()=>sceneJsonPicker?.click());
+sceneJsonPicker?.addEventListener('change',async()=>{
+  const file=sceneJsonPicker.files?.[0];if(!file)return;
+  try {
+    const data=JSON.parse(await file.text());
+    if(data.format!=='kani-camera-scene'||data.version!==1)throw Error('Unsupported format');
+    const validTransform=t=>t&&Array.isArray(t.position)&&t.position.length===3&&Array.isArray(t.quaternion)&&t.quaternion.length===4&&Array.isArray(t.scale)&&t.scale.length===3&&[...t.position,...t.quaternion,...t.scale].every(Number.isFinite);
+    if(!validTransform(data.guitar)||!validTransform(data.floor))throw Error('Invalid transforms');
+    // Detach to world coordinates before restoring saved transforms.
+    scene.attach(model);scene.attach(floorPivot);
+    if(placementGroup){placementGroup.position.set(0,0,0);placementGroup.quaternion.identity();placementGroup.scale.set(1,1,1);}
+    restoreTransform(model,data.guitar);restoreTransform(floorPivot,data.floor);
+    placementFloorPosition.copy(floorPivot.position);placementFloorQuaternion.copy(floorPivot.quaternion);placementFloorScale=floorPivot.scale.x;
+    placementFloorFrozen=true;transformMode='guitar';
+    placementModeBtn?.classList.remove('active');guitarModeBtn?.classList.add('active');
+    if(data.fov>=20&&data.fov<=80){camera.fov=data.fov;camera.updateProjectionMatrix();fovRange.value=String(data.fov);fovOut.textContent=data.fov+'°';}
+    if(data.shadow){
+      const s=data.shadow;
+      floorShadowEnabledState=!!s.floorEnabled;floorShadowEnabled.checked=floorShadowEnabledState;
+      floorShadowOpacityState=THREE.MathUtils.clamp(Number(s.opacity)||0,0,1);floorShadowOpacity.value=String(floorShadowOpacityState);
+      floorShadowSoftnessState=THREE.MathUtils.clamp(Number(s.softness)||0,0,1);floorShadowSoftness.value=String(floorShadowSoftnessState);
+      shadowDirectionState=Number(s.direction)||0;shadowLengthState=Number(s.length)||0.55;manualShadowShapeEnabled=!!s.manual;
+      shadowEnabledState=!!s.roundEnabled;shadowEnabled.checked=shadowEnabledState;
+      shadowOpacityState=THREE.MathUtils.clamp(Number(s.roundOpacity)||0,0,1);shadowOpacity.value=String(shadowOpacityState);
+      shadowBlurState=THREE.MathUtils.clamp(Number(s.roundBlur)||0,0,1);shadowBlur.value=String(shadowBlurState);
+      shadowSizeState=Number(s.roundSize)||0.65;shadowSize.value=String(shadowSizeState);
+      shadowOffsetState=Number(s.roundOffset)||0;shadowOffset.value=String(shadowOffsetState);
+      syncProjectedShadowRendering();refreshShadowTexture();updateShadowLabels();updateFloorLabels();
+    }
+    if(data.lighting){
+      const x=data.lighting;
+      if(Number.isFinite(x.power)){lightPower.value=String(THREE.MathUtils.clamp(x.power,0,10));}
+      if(Number.isFinite(x.azimuth))lightAzimuth.value=String(x.azimuth);
+      if(Number.isFinite(x.elevation))lightElevation.value=String(x.elevation);
+      if(['ibl','light','both'].includes(x.method)){lightMethod.value=x.method;lightMethodState=x.method;}
+      autoLight.checked=!!x.auto;updateLightControlState();setManualLighting();updateLightLabels();
+      // A live or scanned IBL needs camera data; restore Studio for reproducibility.
+      iblSourceState='studio';environmentScanFrozen=false;dualScanPhase=0;
+      scanEnvironmentStatus.textContent='スタジオ';scanEnvironmentBtn.textContent='ライブに戻す';
+      applyRenderQualityMode(renderQualityMode);
+    }
+    if(data.blend){
+      blendEnabledState=!!data.blend.enabled;blendEnabled.checked=blendEnabledState;
+      blendStrengthState=THREE.MathUtils.clamp(Number(data.blend.strength)||0,0,1);blendStrength.value=String(blendStrengthState);updateBlendLabel();
+    }
+    if(['red','mint','black','darkBrown','redBrown'].includes(data.color))await setKaniColor(data.color);
+    updateVirtualFloor();updateGroundShadow();updateShadowFromDirectControls();syncQuickToggleButtons();
+    alert('配置設定を読み込みました。背景画像は別途選択してください。');
+  }catch(e){console.error(e);alert('設定JSONを読み込めませんでした。ファイル形式を確認してください。');}
+  finally{sceneJsonPicker.value='';}
+});
+
+
 captureBtn.addEventListener('click', () => {
   lastBackgroundBlob = null;
   if (lastBackgroundUrl) {
