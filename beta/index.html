@@ -715,6 +715,8 @@
       font-size: 13px;
       border-radius: 999px;
     }
+    .preview-extra-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:12px; }
+    .preview-extra-actions button { font-size:13px; padding:8px 12px; }
     #savePsdBtn {
       padding: 7px 13px;
       font-size: 13px;
@@ -956,10 +958,12 @@
       <button id="colorBtn">カニギターの色</button>
       <button id="hideBtn">カニギターを隠す</button>
       <button id="saveSettingsBtn">保存形式</button>
+      <button id="settingsSaveSceneJsonBtn" type="button">配置設定をJSON保存</button>
+      <button id="settingsLoadSceneJsonBtn" type="button">配置設定を読み込む</button>
       <button id="renderCompareBtn" style="display:none">画質比較</button>
       <button id="helpBtn">使い方</button>
       <button id="reloadLatestBtn">最新版を再読み込み</button>
-      <div class="menu-version">Kani Camera v1.37.11 beta</div>
+      <div class="menu-version">Kani Camera v1.37.12 beta</div>
     </div>
     
     <div id="renderComparePanel" aria-label="画質比較">
@@ -1220,6 +1224,8 @@
       <div class="format-grid preview-format-grid" aria-label="保存形式">
         <button id="previewFormatJpegBtn" class="format-choice active">JPEG</button>
         <button id="previewFormatPngBtn" class="format-choice">PNG</button>
+      </div>
+      <div class="preview-extra-actions">
         <button id="savePsdBtn">PSD（レイヤー付き）</button>
         <button id="saveSceneJsonBtn" type="button">配置設定をJSON保存</button>
         <button id="loadSceneJsonBtn" type="button">配置設定を読み込む</button>
@@ -1231,7 +1237,7 @@
   <div id="startOverlay">
     <div id="startCard">
       <h1>カニギターカメラ</h1>
-      <div class="start-version">Kani Camera v1.37.11 beta</div>
+      <div class="start-version">Kani Camera v1.37.12 beta</div>
       <div class="start-actions">
         <div class="start-primary-actions">
           <button id="startCamera">カメラを開始</button>
