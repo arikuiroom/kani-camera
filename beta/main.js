@@ -513,7 +513,7 @@ function ensureVirtualFloor() {
   // GridHelper draws only orthogonal grid lines, never triangle diagonals.
   floorGuide = new THREE.GridHelper(6, 6, 0x66ccff, 0x66ccff);
   floorGuide.material.transparent = true;
-  floorGuide.material.opacity = 0.20;
+  floorGuide.material.opacity = 0.48;
   floorGuide.material.depthWrite = false;
   floorGuide.renderOrder = -60;
   floorPivot.add(floorGuide);
@@ -2808,6 +2808,8 @@ savePsdBtn.addEventListener('click', saveLayeredPsd);
 const saveSceneJsonBtn = document.getElementById('saveSceneJsonBtn');
 const loadSceneJsonBtn = document.getElementById('loadSceneJsonBtn');
 const sceneJsonPicker = document.getElementById('sceneJsonPicker');
+const settingsSaveSceneJsonBtn = document.getElementById('settingsSaveSceneJsonBtn');
+const settingsLoadSceneJsonBtn = document.getElementById('settingsLoadSceneJsonBtn');
 function serializeTransform(obj) {
   return {position: obj.position.toArray(), quaternion: obj.quaternion.toArray(), scale: obj.scale.toArray()};
 }
@@ -2842,7 +2844,7 @@ function exportSceneState() {
     blend:{enabled:blendEnabledState,strength:blendStrengthState}
   };
 }
-saveSceneJsonBtn?.addEventListener('click', async () => {
+async function saveSceneJson() {
   try {
     const data = JSON.stringify(exportSceneState(), null, 2);
     const stamp = new Date().toISOString().replace(/[-:T]/g,'').slice(0,12);
@@ -2854,8 +2856,11 @@ saveSceneJsonBtn?.addEventListener('click', async () => {
       setTimeout(()=>URL.revokeObjectURL(url),30000);
     }
   } catch(e) {if(e?.name!=='AbortError'){console.error(e);alert('設定を保存できませんでした');}}
-});
+}
+saveSceneJsonBtn?.addEventListener('click', saveSceneJson);
+settingsSaveSceneJsonBtn?.addEventListener('click', saveSceneJson);
 loadSceneJsonBtn?.addEventListener('click',()=>sceneJsonPicker?.click());
+settingsLoadSceneJsonBtn?.addEventListener('click',()=>sceneJsonPicker?.click());
 sceneJsonPicker?.addEventListener('change',async()=>{
   const file=sceneJsonPicker.files?.[0];if(!file)return;
   try {
